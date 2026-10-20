@@ -101,6 +101,7 @@ final class SourcePathDiscovery
                 $this->walk($item, [...$tokens, ['type' => 'wildcard']], $depth + 1, $found, $max_paths, true);
             }
             $this->walk($value[0], [...$tokens, ['type' => 'key', 'key' => 0]], $depth + 1, $found, $max_paths, true);
+            $this->walk($value[count($value) - 1], [...$tokens, ['type' => 'last']], $depth + 1, $found, $max_paths, true);
             return;
         }
 

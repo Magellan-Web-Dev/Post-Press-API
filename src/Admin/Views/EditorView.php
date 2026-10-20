@@ -463,11 +463,13 @@ final class EditorView
                 <ul>
                     <li><code>event.title</code> — <?php esc_html_e('nested keys', 'post-press-api'); ?></li>
                     <li><code>sessions.0.date</code>, <code>sessions[0].date</code> — <?php esc_html_e('array index', 'post-press-api'); ?></li>
+                    <li><code>items[-1]</code>, <code>products[-1].name</code>, <code>groups[-1].members[-1].email</code> — <?php esc_html_e('the last item of any array, with optional nested keys; use [-1] when the current value itself is an array', 'post-press-api'); ?></li>
                     <li><code>sessions[*].date</code>, <code>dates_text[*]</code> — <?php esc_html_e('every item (a list; use Join to make text)', 'post-press-api'); ?></li>
                     <li><code>["key.with.dots"]</code>, <code>meta['a[b]']</code> — <?php esc_html_e('keys containing ".", "[", "]" or starting with "$"', 'post-press-api'); ?></li>
                     <li><code>$</code> — <?php esc_html_e('the whole record (or the current repeater item)', 'post-press-api'); ?></li>
                     <li><code>{event.title} – {website.host}</code> — <?php esc_html_e('template placeholders; {{ and }} write literal braces', 'post-press-api'); ?></li>
                 </ul>
+                <p><?php esc_html_e('[-1] selects the final item in the supplied order, even when it is null. An empty list is missing. Other negative indices are not supported.', 'post-press-api'); ?></p>
                 <p><?php esc_html_e('Missing keys and null values are handled separately; false, 0, empty text, and empty lists are real values. Fallback values skip the transformation and must already be in the destination\'s format. Repeater rows are rebuilt from the source list on every write, so values from one source item (such as a session\'s date and time) always stay in the same row.', 'post-press-api'); ?></p>
             </details>
         </section>

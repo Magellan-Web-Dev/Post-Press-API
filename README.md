@@ -28,7 +28,8 @@ Post Press API makes **outbound** requests only. Receiving webhooks and two-way 
 14. [Hooks for developers](#hooks-for-developers)
 15. [Architecture](#architecture)
 16. [Tests](#tests)
-17. [Limitations](#limitations)
+17. [Building a release zip](#building-a-release-zip)
+18. [Limitations](#limitations)
 
 ---
 
@@ -76,6 +77,9 @@ Paths are used for the records path, identity, success flag, pagination flags, a
 | `event.title` | Nested object keys |
 | `sessions.0.date` | Array index (numeric segment) |
 | `sessions[0].date` | Array index (bracket form) |
+| `items[-1]`, `products[-1].name` | The last item of any array, optionally followed by nested keys |
+| `groups[-1].members[-1].email` | Last-item selection at multiple nested levels |
+| `[-1]`, `$[-1]` | The last item when the current context itself is an array |
 | `sessions[*].date` | Wildcard: the `date` of every session, as a list |
 | `dates_text[*]` | Every item of a list of scalars |
 | `sessions.*.date` | `*` as a whole segment is also a wildcard |
@@ -83,7 +87,7 @@ Paths are used for the records path, identity, success flag, pagination flags, a
 | `$.data`, `$[0]` | Explicit root prefix |
 | `["key.with.dots"]`, `meta['a[b]']` | Quoted keys for literal `.`, `[`, `]`, a leading `$`, or a key that is exactly `*` (escape `"`, `'`, and `\` with a backslash) |
 
-Negative indices, slices, filters, and expressions are rejected with a clear error.
+`[-1]` works with any array key, including in template placeholders and nested ACF mappings. It selects the final item in the supplied order without sorting or skipping null items. An empty list or an object used with `[-1]` is **missing**; a null last item or null parent remains **null**. Quoted keys such as `["-1"]` still address literal object keys. Other negative indices, slices, filters, and expressions are rejected with a clear error.
 
 **Missing vs. present values.** A path either finds nothing (**missing**), finds `null` (**null**), or finds a value. `false`, `0`, `"0"`, `""`, and `[]` are real values and are written as such. A path through a null parent — `location.city` when `location` is `null` — counts as **null**; a path through a missing key or a scalar counts as **missing**. Wildcards collect matched values and leave out items where the rest of the path is missing or null; a wildcard over an empty list is an empty list.
 
@@ -366,6 +370,16 @@ php tests/run.php Sync       # files whose name contains "Sync"
 It uses in-memory WordPress, ACF, and `$wpdb` stubs that reproduce the behaviors that matter here (meta unslashing, `false` returns for unchanged values, values stored as strings, ACF repeater storage, cron duplicate rules, response truncation) and mocked HTTP responses based on the sample payload. Each test file runs in its own PHP process so some files can run without ACF loaded. Any PHP warning or deprecation fails the test that caused it.
 
 Note: the repository's `.gitignore` excludes `/tests/`, so the suite is kept locally and is not part of releases.
+
+## Building a release zip
+
+To produce an installable package for **Plugins → Add New → Upload Plugin**:
+
+```sh
+./build.sh
+```
+
+This writes `build/post-press-api-<version>.zip` with a single top-level `post-press-api/` folder. Git files, `tests/`, `build/`, `.DS_Store`, and the script itself are left out. The version comes from the plugin header, and the build stops if it does not match `PPAPI_VERSION`, so bump both together. Rebuilding the same version overwrites that zip. `build/` is git-ignored.
 
 ## Limitations
 

@@ -263,6 +263,9 @@ final class AboutView
             ['event.title', __('A nested key.', 'post-press-api')],
             ['sessions.0.date', __('An array item by index (numeric segment).', 'post-press-api')],
             ['sessions[0].date', __('The same, in bracket form.', 'post-press-api')],
+            ['items[-1]', __('The last item of any array, in the supplied order.', 'post-press-api')],
+            ['groups[-1].members[-1].email', __('Nested last-item selection with any array keys.', 'post-press-api')],
+            ['[-1]', __('The last item when the current context itself is an array.', 'post-press-api')],
             ['sessions[*].date', __('The date of every session, as a list.', 'post-press-api')],
             ['dates_text[*]', __('Every item of a list of text values.', 'post-press-api')],
             ['$', __('The current context: the whole response (records path), the record, or the current repeater item.', 'post-press-api')],
@@ -274,7 +277,7 @@ final class AboutView
             <h2 id="ppapi-about-paths-heading"><?php esc_html_e('Paths: selecting data from JSON', 'post-press-api'); ?></h2>
             <p><?php esc_html_e('The records path selects the list of records in the response (use $ when the response itself is the list, or items[*] to use an object\'s values as records). Every other path is read inside each record.', 'post-press-api'); ?></p>
             <?php $this->table([__('Path', 'post-press-api'), __('Meaning', 'post-press-api')], $rows, true); ?>
-            <p><?php esc_html_e('A path either finds nothing (missing), finds null, or finds a value. false, 0, empty text, and empty lists are real values and are written as such. A path through a null parent — location.city when location is null — counts as null. Negative indices, slices, filters, and expressions are rejected.', 'post-press-api'); ?></p>
+            <p><?php esc_html_e('A path either finds nothing (missing), finds null, or finds a value. false, 0, empty text, and empty lists are real values and are written as such. A path through a null parent — location.city when location is null — counts as null. [-1] on an empty list is missing; a null last item stays null. Negative indices other than [-1], slices, filters, and expressions are rejected.', 'post-press-api'); ?></p>
         </section>
         <?php
     }

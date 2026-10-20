@@ -14,6 +14,8 @@ if (!defined('ABSPATH')) exit;
  *   event.title           nested object keys
  *   sessions.0.date       numeric segments address array indices (or numeric object keys)
  *   sessions[0].date      bracket indices
+ *   items[-1].name        the last list item's name (any array key)
+ *   [-1]                  the last item when the context itself is a list
  *   sessions[*].date      wildcard: collects "date" from every item
  *   dates_text[*]         wildcard over a list of scalars
  *   sessions.*.date       "*" as a whole segment is also a wildcard
@@ -21,8 +23,8 @@ if (!defined('ABSPATH')) exit;
  *   meta['a[b]'].value    a leading "$", or a key that is exactly "*"; \" \' and \\ escape
  *   $.data / $[0]         an optional leading "$" refers to the context root explicitly
  *
- * Negative indices, slices, filters, and expressions are deliberately unsupported
- * and rejected with a {@see PathSyntaxError}.
+ * Only [-1] selects from the end of a list. Other negative indices, slices,
+ * filters, and expressions are rejected with a {@see PathSyntaxError}.
  *
  * Wildcard results are lists of the matched values. Items where the remainder of
  * the path is missing, and matched values that are null, are left out of that list.
@@ -218,10 +220,15 @@ final class PathResolver
                 $out .= '[*]';
                 continue;
             }
+            if ($token['type'] === 'last') {
+                $out .= '[-1]';
+                continue;
+            }
 
             $key = $token['key'];
             if (is_int($key)) {
-                $out .= '[' . $key . ']';
+                // Negative object keys are literal keys, not positional selectors.
+                $out .= $key < 0 ? '["' . $key . '"]' : '[' . $key . ']';
             } elseif ($this->is_plain_key($key)) {
                 $out .= ($out === '' ? '' : '.') . $key;
             } else {
@@ -264,7 +271,18 @@ final class PathResolver
                 ));
             }
 
-            $key = $token['key'];
+            if ($token['type'] === 'last') {
+                if (!array_is_list($value) || $value === []) {
+                    return PathResult::missing(sprintf(
+                        /* translators: %s: path segment. */
+                        __('"%s" is not a non-empty list, so "[-1]" has nothing to select.', 'post-press-api'),
+                        $where
+                    ));
+                }
+                $key = count($value) - 1;
+            } else {
+                $key = $token['key'];
+            }
             if (!array_key_exists($key, $value)) {
                 return PathResult::missing(sprintf(
                     /* translators: 1: path segment, 2: missing key. */
@@ -440,10 +458,13 @@ final class PathResolver
         }
 
         if ($char === '-') {
-            throw new PathSyntaxError(__('Negative array indices are not supported.', 'post-press-api'));
+            if (substr($path, $index, 3) === '-1]') {
+                return [['type' => 'last'], $index + 3];
+            }
+            throw new PathSyntaxError(__('Only [-1] is supported for negative array indices; it selects the last item.', 'post-press-api'));
         }
 
-        throw new PathSyntaxError(__('Brackets must contain an index such as [0], a wildcard [*], or a quoted key such as ["name"].', 'post-press-api'));
+        throw new PathSyntaxError(__('Brackets must contain an index such as [0], [-1] for the last item, a wildcard [*], or a quoted key such as ["name"].', 'post-press-api'));
     }
 
     /**

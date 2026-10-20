@@ -1,2 +1,5 @@
 # Ignore tests folder
 /tests/
+
+# Ignore build folder
+/build/
