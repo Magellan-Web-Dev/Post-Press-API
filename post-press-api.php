@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Post Press API
  * Description:       Fetch JSON records from external APIs manually or on a schedule and map them into posts, custom post types, post meta, and Advanced Custom Fields.
- * Version:           1.0.0
+ * Version:           1.0.1
  * Author:            Chris Paschall
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
@@ -53,7 +53,7 @@ if (version_compare(PHP_VERSION, '8.1', '<')) {
 } else {
 
     /** @var string Plugin version. */
-    define('PPAPI_VERSION', '1.0.0');
+    define('PPAPI_VERSION', '1.0.1');
 
     /** @var string Absolute path to the main plugin file. */
     define('PPAPI_FILE', __FILE__);
