@@ -1,0 +1,446 @@
+/* Post Press API admin screens. Every selector is scoped to .ppapi-wrap. */
+
+.ppapi-wrap {
+	scroll-behavior: smooth;
+}
+
+.ppapi-wrap .ppapi-card {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	margin: 16px 0;
+	padding: 4px 20px 16px;
+	max-width: 1280px;
+}
+
+.ppapi-wrap .ppapi-card > h2 {
+	font-size: 1.3em;
+	margin: 16px 0 8px;
+}
+
+.ppapi-wrap .ppapi-section-intro,
+.ppapi-wrap .ppapi-intro {
+	color: #50575e;
+	max-width: 70em;
+}
+
+.ppapi-wrap .ppapi-empty {
+	text-align: center;
+	padding: 24px;
+}
+
+.ppapi-wrap .ppapi-section-nav {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 16px;
+	margin: 12px 0 0;
+	padding: 8px 12px;
+	background: #f6f7f7;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	position: sticky;
+	top: 32px;
+	z-index: 10;
+	max-width: 1280px;
+	box-sizing: border-box;
+}
+
+.ppapi-wrap .ppapi-required {
+	color: #b32d2e;
+}
+
+.ppapi-wrap .ppapi-field-error {
+	color: #b32d2e;
+	border-left: 4px solid #d63638;
+	padding: 2px 8px;
+	margin: 6px 0 0;
+}
+
+.ppapi-wrap .ppapi-field-error p {
+	margin: 2px 0;
+}
+
+.ppapi-wrap [aria-invalid="true"] {
+	border-color: #d63638;
+	box-shadow: 0 0 0 1px #d63638;
+}
+
+.ppapi-wrap .ppapi-error-summary:focus {
+	outline: 2px solid #2271b1;
+	outline-offset: 2px;
+}
+
+.ppapi-wrap .ppapi-inline-fields {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px 24px;
+	align-items: flex-end;
+}
+
+.ppapi-wrap .ppapi-inline-fields > .description,
+.ppapi-wrap .ppapi-inline-fields > p {
+	flex-basis: 100%;
+	margin: 0;
+}
+
+.ppapi-wrap .ppapi-inline-field {
+	display: inline-flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.ppapi-wrap .ppapi-pairs {
+	border-collapse: collapse;
+	margin-bottom: 6px;
+}
+
+.ppapi-wrap .ppapi-pairs th {
+	text-align: left;
+	padding: 0 8px 4px 0;
+	font-weight: 600;
+}
+
+.ppapi-wrap .ppapi-pairs td {
+	padding: 0 8px 6px 0;
+}
+
+.ppapi-wrap .ppapi-pairs input {
+	width: 16em;
+	max-width: 100%;
+}
+
+.ppapi-wrap .ppapi-auth-fields {
+	margin-top: 8px;
+	padding: 4px 12px;
+	border-left: 3px solid #dcdcde;
+}
+
+.ppapi-wrap .ppapi-source-choice {
+	margin-bottom: 8px;
+}
+
+.ppapi-wrap .ppapi-source-choice legend {
+	font-weight: 600;
+	margin-bottom: 4px;
+}
+
+.ppapi-wrap .ppapi-source-choice label {
+	margin-right: 16px;
+}
+
+/* Mapping editor */
+
+.ppapi-wrap .ppapi-mapping {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	gap: 8px 20px;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	padding: 8px 14px 12px;
+	margin: 0 0 12px;
+	background: #fcfcfc;
+}
+
+.ppapi-wrap .ppapi-mapping--child {
+	background: #fff;
+	border-style: dashed;
+}
+
+.ppapi-wrap .ppapi-mapping > legend {
+	font-weight: 600;
+	padding: 0 6px;
+}
+
+.ppapi-wrap .ppapi-mapping__col h4 {
+	margin: 4px 0 6px;
+	font-size: 12px;
+	text-transform: uppercase;
+	letter-spacing: .04em;
+	color: #50575e;
+}
+
+.ppapi-wrap .ppapi-control {
+	margin-bottom: 8px;
+}
+
+.ppapi-wrap .ppapi-control label {
+	display: block;
+	margin-bottom: 2px;
+}
+
+.ppapi-wrap .ppapi-control input[type="text"],
+.ppapi-wrap .ppapi-control select {
+	width: 100%;
+	max-width: 100%;
+}
+
+.ppapi-wrap .ppapi-mapping__actions {
+	grid-column: 1 / -1;
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	justify-content: flex-end;
+}
+
+.ppapi-wrap .ppapi-mapping__children {
+	grid-column: 1 / -1;
+	border-left: 3px solid #72aee6;
+	padding-left: 12px;
+}
+
+.ppapi-wrap .ppapi-children-title {
+	font-weight: 600;
+	margin: 4px 0 8px;
+}
+
+.ppapi-wrap .ppapi-field-info code {
+	font-size: 12px;
+}
+
+.ppapi-wrap .ppapi-map-table input {
+	width: 9em;
+}
+
+.ppapi-wrap .ppapi-link-delete {
+	color: #b32d2e;
+}
+
+/* Results */
+
+.ppapi-wrap .ppapi-result:not(:empty) {
+	margin-top: 10px;
+	padding: 8px 12px;
+	border: 1px solid #dcdcde;
+	background: #f6f7f7;
+	border-radius: 4px;
+	max-width: 100%;
+	overflow-x: auto;
+}
+
+.ppapi-wrap .ppapi-result__meta {
+	color: #50575e;
+	font-family: Consolas, Monaco, monospace;
+}
+
+.ppapi-wrap .ppapi-pre {
+	max-height: 360px;
+	overflow: auto;
+	background: #fff;
+	border: 1px solid #dcdcde;
+	padding: 8px;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.ppapi-wrap .ppapi-paths-table,
+.ppapi-wrap .ppapi-detail-table {
+	margin: 8px 0;
+}
+
+.ppapi-wrap .ppapi-paths-table caption {
+	text-align: left;
+	font-weight: 600;
+	padding: 4px 0;
+}
+
+.ppapi-wrap .ppapi-sample-cell {
+	max-width: 28em;
+	word-break: break-word;
+	font-family: Consolas, Monaco, monospace;
+	font-size: 12px;
+}
+
+.ppapi-wrap .ppapi-table-scroll {
+	overflow-x: auto;
+}
+
+.ppapi-wrap .ppapi-detail-child td:first-child {
+	padding-left: 20px;
+}
+
+.ppapi-wrap .ppapi-detail-result--error {
+	color: #b32d2e;
+	font-weight: 600;
+}
+
+.ppapi-wrap .ppapi-dry-record {
+	margin: 8px 0;
+	padding: 6px 10px;
+	background: #fff;
+	border-left: 4px solid #72aee6;
+}
+
+.ppapi-wrap .ppapi-dry-record--failed {
+	border-left-color: #d63638;
+}
+
+.ppapi-wrap .ppapi-dry-record--unchanged,
+.ppapi-wrap .ppapi-dry-record--skipped {
+	border-left-color: #c3c4c7;
+}
+
+.ppapi-wrap .ppapi-dry-record > summary {
+	cursor: pointer;
+	font-weight: 600;
+}
+
+/* Status badges */
+
+.ppapi-wrap .ppapi-badge,
+.ppapi-wrap .ppapi-status {
+	display: inline-block;
+	padding: 1px 8px;
+	border-radius: 10px;
+	font-size: 12px;
+	line-height: 1.8;
+	background: #f0f0f1;
+	color: #3c434a;
+	margin: 0 4px 2px 0;
+}
+
+.ppapi-wrap .ppapi-badge--on,
+.ppapi-wrap .ppapi-status--success {
+	background: #edfaef;
+	color: #00450c;
+}
+
+.ppapi-wrap .ppapi-badge--warning,
+.ppapi-wrap .ppapi-status--warning {
+	background: #fcf9e8;
+	color: #614200;
+}
+
+.ppapi-wrap .ppapi-badge--info,
+.ppapi-wrap .ppapi-status--info {
+	background: #f0f6fc;
+	color: #0a4b78;
+}
+
+.ppapi-wrap .ppapi-status--error {
+	background: #fcf0f1;
+	color: #8a2424;
+}
+
+.ppapi-wrap .ppapi-counts {
+	color: #50575e;
+	font-size: 12px;
+}
+
+.ppapi-wrap .ppapi-text-warning {
+	color: #8a6100;
+}
+
+.ppapi-wrap .ppapi-text-error {
+	color: #b32d2e;
+}
+
+.ppapi-wrap .ppapi-num {
+	text-align: right;
+}
+
+.ppapi-wrap .ppapi-history-message {
+	margin: 0 0 4px;
+}
+
+.ppapi-wrap .ppapi-level--error {
+	color: #b32d2e;
+	font-weight: 600;
+}
+
+.ppapi-wrap .ppapi-level--warning {
+	color: #8a6100;
+	font-weight: 600;
+}
+
+.ppapi-wrap .ppapi-log-actions {
+	margin: 8px 0;
+}
+
+.ppapi-wrap .ppapi-help {
+	margin-top: 12px;
+}
+
+.ppapi-wrap .ppapi-help summary {
+	cursor: pointer;
+	font-weight: 600;
+}
+
+.ppapi-wrap .ppapi-submit {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+}
+
+.ppapi-wrap .ppapi-dirty-note {
+	color: #8a6100;
+}
+
+.no-js .ppapi-wrap [data-ppapi-requires-js] {
+	display: none;
+}
+
+@media screen and (max-width: 782px) {
+	.ppapi-wrap .ppapi-section-nav {
+		position: static;
+	}
+
+	.ppapi-wrap .ppapi-pairs input {
+		width: 100%;
+	}
+}
+
+/* About screen */
+
+.ppapi-wrap .ppapi-about-lead {
+	font-size: 14px;
+	max-width: 70em;
+}
+
+.ppapi-wrap .ppapi-steps {
+	max-width: 70em;
+	padding-left: 1.5em;
+}
+
+.ppapi-wrap .ppapi-steps li,
+.ppapi-wrap .ppapi-list li {
+	margin-bottom: 8px;
+	line-height: 1.6;
+}
+
+.ppapi-wrap .ppapi-list {
+	list-style: disc;
+	padding-left: 1.5em;
+	max-width: 70em;
+}
+
+.ppapi-wrap .ppapi-feature-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+	gap: 12px;
+	margin: 0;
+}
+
+.ppapi-wrap .ppapi-feature {
+	border: 1px solid #dcdcde;
+	border-left: 4px solid #2271b1;
+	border-radius: 4px;
+	padding: 4px 14px;
+	margin: 0;
+	background: #fcfcfc;
+}
+
+.ppapi-wrap .ppapi-feature h3 {
+	margin: 10px 0 4px;
+	font-size: 14px;
+}
+
+.ppapi-wrap .ppapi-reference-table,
+.ppapi-wrap .ppapi-status-table {
+	margin: 8px 0 12px;
+	max-width: 70em;
+}
+
+.ppapi-wrap .ppapi-status-table th[scope="row"] {
+	width: 14em;
+	font-weight: 600;
+}
