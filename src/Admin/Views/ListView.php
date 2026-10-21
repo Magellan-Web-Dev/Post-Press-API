@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace PostPressAPI\Admin\Views;
 
+if (!defined('ABSPATH')) exit;
+
 use PostPressAPI\Admin\AdminActions;
 use PostPressAPI\Admin\AdminPage;
 use PostPressAPI\Admin\Format;
@@ -13,8 +15,6 @@ use PostPressAPI\Presets\PresetSchema;
 use PostPressAPI\Scheduling\Scheduler;
 use PostPressAPI\Services;
 use PostPressAPI\Sync\ImportRunner;
-
-if (!defined('ABSPATH')) exit;
 
 /**
  * The preset list screen.

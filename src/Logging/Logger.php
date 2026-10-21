@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace PostPressAPI\Logging;
 
+if (!defined('ABSPATH')) exit;
+
 use PostPressAPI\Support\Clock;
 use PostPressAPI\Support\Redactor;
-
-if (!defined('ABSPATH')) exit;
 
 /**
  * Bounded activity log (newest first, at most 200 entries, not autoloaded).

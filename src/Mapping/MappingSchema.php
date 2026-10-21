@@ -16,7 +16,7 @@ if (!defined('ABSPATH')) exit;
  *   target_type  core | meta | acf
  *   target       core field name, meta key, or ACF field key
  *   transform    one of Transformer::TYPES
- *   options      transformation options (separator, formats, time zones, decimals, value map)
+ *   options      transformation options (separator, join_datetime, formats, time zones, decimals, value map)
  *   on_missing   preserve | clear | fallback | fail | skip_row
  *   on_null      same choices as on_missing
  *   fallback     literal fallback value
@@ -122,6 +122,7 @@ final class MappingSchema
             'transform'   => self::choice($row['transform'] ?? '', Transformer::TYPES, Transformer::NONE),
             'options'     => [
                 'separator'       => self::text($options['separator'] ?? ', ', 20),
+                'join_datetime'   => !empty($options['join_datetime']),
                 'input_format'    => trim(self::text($options['input_format'] ?? '', 50)),
                 'input_timezone'  => trim(self::text($options['input_timezone'] ?? '', 64)),
                 'output_format'   => trim(self::text($options['output_format'] ?? '', 50)),
@@ -156,6 +157,10 @@ final class MappingSchema
         foreach ($rows as $row) {
             $copy = $row;
             unset($copy['id']);
+            // Adding an opt-in Join option must not invalidate existing imports.
+            if ($copy['transform'] !== Transformer::JOIN || empty($copy['options']['join_datetime'])) {
+                unset($copy['options']['join_datetime']);
+            }
             // Off is the historical behavior: do not invalidate existing fingerprints.
             if (empty($copy['media']['download'])) {
                 unset($copy['media']);

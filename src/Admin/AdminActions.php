@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace PostPressAPI\Admin;
 
+if (!defined('ABSPATH')) exit;
+
 use PostPressAPI\Presets\PresetRepository;
 use PostPressAPI\Services;
 use PostPressAPI\Support\Permissions;
-
-if (!defined('ABSPATH')) exit;
 
 /**
  * admin-post.php handlers for list-row actions.

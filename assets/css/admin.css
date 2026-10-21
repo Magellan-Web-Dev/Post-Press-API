@@ -177,9 +177,22 @@
 .ppapi-wrap .ppapi-mapping__actions {
 	grid-column: 1 / -1;
 	display: flex;
+	flex-wrap: wrap;
 	gap: 8px;
 	align-items: center;
 	justify-content: flex-end;
+}
+
+.ppapi-wrap .ppapi-mapping-position {
+	display: inline-flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	align-items: center;
+}
+
+.ppapi-wrap .ppapi-position-error {
+	color: #b32d2e;
+	flex-basis: 100%;
 }
 
 .ppapi-wrap .ppapi-mapping__children {

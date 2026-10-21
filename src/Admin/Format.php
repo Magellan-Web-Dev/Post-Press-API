@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace PostPressAPI\Admin;
 
+if (!defined('ABSPATH')) exit;
+
 use PostPressAPI\Presets\PresetSchema;
 use PostPressAPI\Sync\ImportRunner;
-
-if (!defined('ABSPATH')) exit;
 
 /**
  * Display helpers for admin screens. All times use the site time zone.

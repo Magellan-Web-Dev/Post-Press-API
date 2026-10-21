@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace PostPressAPI\Sync;
 
-use PostPressAPI\Mapping\DestinationCatalog;
-
 if (!defined('ABSPATH')) exit;
+
+use PostPressAPI\Mapping\DestinationCatalog;
 
 /**
  * Everything record processing needs for one run (or dry run).

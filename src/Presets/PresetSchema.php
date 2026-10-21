@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace PostPressAPI\Presets;
 
-use PostPressAPI\Mapping\MappingSchema;
-
 if (!defined('ABSPATH')) exit;
+
+use PostPressAPI\Mapping\MappingSchema;
 
 /**
  * Structure, defaults, and bounds of a request preset.

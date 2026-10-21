@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace PostPressAPI\Scheduling;
 
+if (!defined('ABSPATH')) exit;
+
 use PostPressAPI\Logging\Logger;
 use PostPressAPI\Presets\PresetRepository;
 use PostPressAPI\Presets\PresetSchema;
 use PostPressAPI\Sync\ImportRunner;
-
-if (!defined('ABSPATH')) exit;
 
 /**
  * WP-Cron integration.

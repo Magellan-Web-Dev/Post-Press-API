@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace PostPressAPI\Admin\Views;
 
+if (!defined('ABSPATH')) exit;
+
 use PostPressAPI\Admin\AdminPage;
 use PostPressAPI\Admin\Format;
 use PostPressAPI\Admin\Notices;
 use PostPressAPI\Logging\Logger;
 use PostPressAPI\Services;
-
-if (!defined('ABSPATH')) exit;
 
 /**
  * Activity log screen.

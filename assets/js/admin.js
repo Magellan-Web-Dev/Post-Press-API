@@ -310,6 +310,7 @@
 	function defaultOptions() {
 		return {
 			separator: ', ',
+			join_datetime: false,
 			input_format: '',
 			input_timezone: '',
 			output_format: '',
@@ -497,6 +498,81 @@
 			}
 		}
 		return options[0][0];
+	}
+
+	/**
+	 * Moves a mapping within its sibling list and keeps focus on that mapping.
+	 * Child rows and settings travel with the row; no mappings cross containers.
+	 *
+	 * @param {Object} row Mapping being moved.
+	 * @param {Array} list Its top-level or nested sibling list.
+	 * @param {number} position Zero-based destination index.
+	 * @param {string} focusId Control to focus after the editor is redrawn.
+	 * @returns {void}
+	 */
+	function moveMapping(row, list, position, focusId) {
+		var index = list.indexOf(row);
+		if (index < 0 || index === position || position < 0 || position >= list.length) {
+			return;
+		}
+		list.splice(position, 0, list.splice(index, 1)[0]);
+		markDirty();
+		renderMappings();
+		var focus = document.getElementById(focusId);
+		if (focus && focus.disabled) {
+			focus = document.getElementById('ppapi-m-' + row.id + '-position');
+		}
+		if (focus) {
+			focus.focus();
+		}
+	}
+
+	/**
+	 * Builds a one-based position control, applied with Move or the Enter key.
+	 * Invalid positions leave the list intact and show an accessible inline error.
+	 *
+	 * @param {Object} row Mapping being positioned.
+	 * @param {number} index Current zero-based position.
+	 * @param {Array} list Siblings defining the allowed range.
+	 * @param {string} base Unique control ID prefix for this mapping.
+	 * @returns {HTMLElement} Position controls for the row action bar.
+	 */
+	function renderPositionControl(row, index, list, base) {
+		var error = el('span', { id: base + '-position-error', className: 'ppapi-position-error', role: 'alert', hidden: true });
+		var input = el('input', {
+			type: 'number', id: base + '-position', className: 'small-text',
+			min: 1, max: list.length, step: 1, value: index + 1,
+			'aria-describedby': base + '-position-range ' + base + '-position-error'
+		});
+		function applyPosition() {
+			var position = Number(input.value);
+			if (!/^\d+$/.test(input.value) || !Number.isSafeInteger(position) || position < 1 || position > list.length) {
+				error.textContent = sprintf(i18n.positionError, list.length);
+				error.hidden = false;
+				input.setAttribute('aria-invalid', 'true');
+				input.focus();
+				return;
+			}
+			error.hidden = true;
+			input.removeAttribute('aria-invalid');
+			moveMapping(row, list, position - 1, input.id);
+		}
+		input.addEventListener('input', function () {
+			error.hidden = true;
+			input.removeAttribute('aria-invalid');
+		});
+		input.addEventListener('keydown', function (event) {
+			if (event.key === 'Enter') {
+				event.preventDefault();
+				applyPosition();
+			}
+		});
+		return el('span', { className: 'ppapi-mapping-position' }, [
+			el('label', { for: input.id, text: i18n.moveToPosition }), input,
+			el('span', { id: base + '-position-range', text: sprintf(i18n.positionRange, list.length) }),
+			el('button', { type: 'button', className: 'button button-small', id: base + '-position-apply', text: i18n.move, onclick: applyPosition }),
+			error
+		]);
 	}
 
 	function renderRow(row, index, list, parent, depth, parentPrefix) {
@@ -691,18 +767,17 @@
 				type: 'button', className: 'button button-small', id: base + '-up', disabled: index === 0,
 				text: i18n.moveUp,
 				onclick: function () {
-					list.splice(index - 1, 0, list.splice(index, 1)[0]);
-					renderMappings();
+					moveMapping(row, list, index - 1, base + '-up');
 				}
 			}),
 			el('button', {
 				type: 'button', className: 'button button-small', id: base + '-down', disabled: index === list.length - 1,
 				text: i18n.moveDown,
 				onclick: function () {
-					list.splice(index + 1, 0, list.splice(index, 1)[0]);
-					renderMappings();
+					moveMapping(row, list, index + 1, base + '-down');
 				}
 			}),
+			renderPositionControl(row, index, list, base),
 			el('button', {
 				type: 'button', className: 'button-link ppapi-link-delete', id: base + '-remove',
 				text: i18n.remove,
@@ -775,9 +850,22 @@
 
 		if (row.transform === 'join') {
 			bind('separator', i18n.separator, { className: 'small-text code' });
+			box.appendChild(el('label', { for: base + '-opt-join_datetime' }, [
+				el('input', {
+					type: 'checkbox', id: base + '-opt-join_datetime', checked: !!options.join_datetime,
+					onchange: function (event) {
+						options.join_datetime = event.target.checked;
+						markDirty();
+						renderMappings();
+						document.getElementById(base + '-opt-join_datetime').focus();
+					}
+				}), ' ' + i18n.joinDateTime
+			]));
+			box.appendChild(el('p', { className: 'description', text: i18n.joinDateHelp }));
 		} else if (row.transform === 'decimal') {
 			bind('decimals', i18n.decimals, { className: 'small-text', inputmode: 'numeric' });
-		} else if (row.transform === 'datetime') {
+		}
+		if (row.transform === 'datetime' || (row.transform === 'join' && options.join_datetime)) {
 			bind('input_format', i18n.inputFormat, { className: 'code', placeholder: 'Y-m-d H:i' });
 			bind('input_timezone', i18n.inputTimezone, { list: 'ppapi-timezones', placeholder: 'America/New_York' });
 			bind('output_format', i18n.outputFormat, { className: 'code' });

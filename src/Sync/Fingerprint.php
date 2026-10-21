@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace PostPressAPI\Sync;
 
+if (!defined('ABSPATH')) exit;
+
 use PostPressAPI\Mapping\MappedRecord;
 use PostPressAPI\Mapping\MappingSchema;
-
-if (!defined('ABSPATH')) exit;
 
 /**
  * Deterministic content fingerprints.

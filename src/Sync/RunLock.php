@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace PostPressAPI\Sync;
 
-use PostPressAPI\Support\Clock;
-
 if (!defined('ABSPATH')) exit;
+
+use PostPressAPI\Support\Clock;
 
 /**
  * Per-preset mutual exclusion for run steps (manual and scheduled alike).

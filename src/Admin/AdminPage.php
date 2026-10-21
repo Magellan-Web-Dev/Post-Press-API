@@ -328,6 +328,8 @@ final class AdminPage
             'skipRow'            => __('Skip this repeater row', 'post-press-api'),
             'fallbackValue'      => __('Fallback value', 'post-press-api'),
             'separator'          => __('Separator (\\n = new line)', 'post-press-api'),
+            'joinDateTime'       => __('Format each item as a date/time before joining', 'post-press-api'),
+            'joinDateHelp'       => __('For a list of dates, use a source such as sessions[*].date. Enable date/time formatting and set Output format to F j for November 18, November 20, December 2. Null items are skipped; invalid dates fail the mapping.', 'post-press-api'),
             'inputFormat'        => __('Input format (optional, PHP date format)', 'post-press-api'),
             'inputTimezone'      => __('Input time zone (for values without an offset)', 'post-press-api'),
             'outputFormat'       => __('Output format (optional)', 'post-press-api'),
@@ -343,6 +345,12 @@ final class AdminPage
             'remove'             => __('Remove', 'post-press-api'),
             'moveUp'             => __('Move up', 'post-press-api'),
             'moveDown'           => __('Move down', 'post-press-api'),
+            'moveToPosition'     => __('Move to position', 'post-press-api'),
+            'move'               => __('Move', 'post-press-api'),
+            /* translators: %d: number of sibling mappings. */
+            'positionRange'      => __('of %d', 'post-press-api'),
+            /* translators: %d: maximum allowed position. */
+            'positionError'      => __('Enter a whole number from 1 to %d, then choose Move.', 'post-press-api'),
             'addSubMapping'      => __('Add sub field mapping', 'post-press-api'),
             'subMappingsGroup'   => __('Sub fields (paths are relative to the group object; use $ for the current record)', 'post-press-api'),
             'subMappingsRepeater' => __('Repeater rows: one row per item of the source list; sub field paths are relative to each item', 'post-press-api'),

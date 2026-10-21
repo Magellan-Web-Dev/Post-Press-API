@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace PostPressAPI\Mapping;
 
-use PostPressAPI\Integration\ACF\AcfFields;
-
 if (!defined('ABSPATH')) exit;
+
+use PostPressAPI\Integration\ACF\AcfFields;
 
 /**
  * Resolves mapping targets for one destination post type.

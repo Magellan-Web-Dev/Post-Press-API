@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace PostPressAPI\Sync;
 
+if (!defined('ABSPATH')) exit;
+
 use PostPressAPI\Mapping\PathResolver;
 use PostPressAPI\Mapping\PathSyntaxError;
 use PostPressAPI\Mapping\ValueInspector;
 use PostPressAPI\Presets\PresetSchema;
-
-if (!defined('ABSPATH')) exit;
 
 /**
  * Determines a record's identity, separately from its content.

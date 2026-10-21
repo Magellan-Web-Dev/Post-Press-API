@@ -231,7 +231,8 @@ final class MappingValidator
     {
         $options = (array) $row['options'];
 
-        if ($row['transform'] === Transformer::DATETIME) {
+        if ($row['transform'] === Transformer::DATETIME
+            || ($row['transform'] === Transformer::JOIN && !empty($options['join_datetime']))) {
             foreach (['input_timezone', 'output_timezone'] as $key) {
                 $name = (string) ($options[$key] ?? '');
                 if ($name !== '' && DateParser::timezone($name) === null) {

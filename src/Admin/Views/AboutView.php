@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace PostPressAPI\Admin\Views;
 
+if (!defined('ABSPATH')) exit;
+
 use PostPressAPI\Admin\AdminPage;
 use PostPressAPI\Logging\Logger;
 use PostPressAPI\Mapping\Transformer;
@@ -12,8 +14,6 @@ use PostPressAPI\Services;
 use PostPressAPI\Sync\PreviewService;
 use PostPressAPI\Sync\RunRepository;
 use PostPressAPI\Updates\GitHubUpdater;
-
-if (!defined('ABSPATH')) exit;
 
 /**
  * The "About" screen: what the plugin does, how to set it up, and a reference
@@ -239,7 +239,7 @@ final class AboutView
             [__('Request presets', 'post-press-api'), __('Any number of independent presets, each with its own endpoint, GET/POST method, query parameters, headers, JSON body, authentication, timeout, response-size limit, and retry count.', 'post-press-api')],
             [__('Test request & sample JSON', 'post-press-api'), __('Fetch a bounded sample without importing, or paste a response to configure mappings offline. See every path in the response with its type and an example value.', 'post-press-api')],
             [__('Nested mapping', 'post-press-api'), __('Read nested keys, array items, and whole lists (event.title, sessions[0].date, sessions[*].date) and write them to post fields, custom meta, or ACF fields — including ACF groups and repeaters.', 'post-press-api')],
-            [__('Transformations', 'post-press-api'), __('Convert values to text, numbers, booleans, validated URLs or emails, joined lists, JSON, dates in an explicit time zone, or mapped values such as approved → publish.', 'post-press-api')],
+            [__('Transformations', 'post-press-api'), __('Convert values to text, numbers, booleans, validated URLs or emails, joined lists (optionally formatting each item as a date/time), JSON, dates in an explicit time zone, or mapped values such as approved → publish.', 'post-press-api')],
             [__('Safe updates', 'post-press-api'), __('Each record keeps a stable identity, so re-running updates the same post. Only changed records are rewritten, only mapped fields change, and missing or null values keep existing data by default.', 'post-press-api')],
             [__('Preview / dry run', 'post-press-api'), __('Run the same identity, mapping, matching, and change detection as a real import without writing posts, meta, attachments, or tracking data.', 'post-press-api')],
             [__('Pagination & batches', 'post-press-api'), __('Follow offset/limit or page-number pagination until the API reports no more records. Large imports run in small saved batches and resume in the background.', 'post-press-api')],
@@ -299,7 +299,7 @@ final class AboutView
             Transformer::BOOLEAN  => __('true/false, 1/0, yes/no, on/off.', 'post-press-api'),
             Transformer::URL      => __('Must be a valid http(s) URL.', 'post-press-api'),
             Transformer::EMAIL    => __('Must be a valid email address.', 'post-press-api'),
-            Transformer::JOIN     => __('Joins a list with a separator (\n for new lines).', 'post-press-api'),
+            Transformer::JOIN     => __('Joins a list with a separator (\n for new lines). Optionally formats each item as a date/time using input/output formats and time zones.', 'post-press-api'),
             Transformer::JSON     => __('Stores any value as JSON text.', 'post-press-api'),
             Transformer::DATETIME => __('Parses dates and times with an optional input format and explicit input/output time zones.', 'post-press-api'),
             Transformer::MAP      => __('Converts listed values (approved → publish); unlisted values are kept, replaced by the fallback, or rejected.', 'post-press-api'),
@@ -335,7 +335,13 @@ final class AboutView
             <h3><?php esc_html_e('When a value is missing or null', 'post-press-api'); ?></h3>
             <?php $this->table([__('Choice', 'post-press-api'), __('Effect', 'post-press-api')], $behaviors); ?>
 
+            <h3><?php esc_html_e('Mapping order', 'post-press-api'); ?></h3>
+            <p><?php esc_html_e('Reorder mappings with Move up / Move down, or enter a whole number in Move to position and click Move (or press Enter). Positions start at 1 and cannot exceed the number of mappings in that list. Other rows shift to make room; settings and child mappings stay with the moved row. Nested mappings move within their own group or repeater. Save the preset to keep the order.', 'post-press-api'); ?></p>
+
             <h3><?php esc_html_e('Dates and time zones', 'post-press-api'); ?></h3>
+            <p><?php esc_html_e('To display November 18, November 20, December 2, map sessions[*].date, choose Join list into text, enable Format each item as a date/time before joining, set Output format to F j, and use a comma followed by a space as the separator. Invalid dates fail the mapping; null items are skipped.', 'post-press-api'); ?></p>
+            <p><?php esc_html_e('For ISO dates such as 2026-11-18, leave Input format blank or use Y-m-d. To join times, use sessions[*].time with Input format H:i and Output format g:i A for values such as 6:30 PM. Choose a text field, textarea, or custom meta key as the destination.', 'post-press-api'); ?></p>
+            <p><?php esc_html_e('Existing Join mappings keep joining plain values until date/time formatting is enabled. An empty list produces empty text. Invalid non-null dates report the failing item position. Missing/null source rules still apply, and fallback text skips transformations. Date formatting settings are included in preset JSON exports; older exports remain importable.', 'post-press-api'); ?></p>
             <p><?php esc_html_e('ISO 8601 values with an offset are converted to the site (or chosen) time zone, and date-only values such as 2026-11-05 are never shifted to another day. Names PHP cannot resolve, such as "Eastern", and ambiguous abbreviations such as CST are rejected rather than guessed: choose the Date/time transformation and set an explicit zone such as America/New_York.', 'post-press-api'); ?></p>
         </section>
         <?php
@@ -479,6 +485,7 @@ define('DISABLE_WP_CRON', true);
             ['sessions[0].date', '—', __('ACF date picker (stored as 20261105)', 'post-press-api')],
             ['sessions', '—', __('ACF repeater: date → date sub field, time → time sub field', 'post-press-api')],
             ['dates_text[*]', __('Join list into text, separator \n', 'post-press-api'), __('ACF text area or a meta key', 'post-press-api')],
+            ['sessions[*].date', __('Join list into text, date/time formatting enabled, output F j, comma-and-space separator', 'post-press-api'), __('ACF text area/text field or a meta key', 'post-press-api')],
             ['location.city', '—', __('ACF text field (null today, so the existing value is kept)', 'post-press-api')],
         ];
         ?>

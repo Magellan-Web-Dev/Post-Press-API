@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace PostPressAPI\Http;
 
-use PostPressAPI\Presets\PresetSchema;
-
 if (!defined('ABSPATH')) exit;
+
+use PostPressAPI\Presets\PresetSchema;
 
 /**
  * Builds the outbound request for a preset and page.

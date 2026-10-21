@@ -372,6 +372,7 @@ final class PresetTransfer
 
     /**
      * Rejects any normalization that would silently lose or reinterpret settings.
+     * Older exports may omit the opt-in Join date flag; its default is false.
      *
      * @param mixed  $input      Submitted JSON value.
      * @param mixed  $normalized Corresponding normalized value.
@@ -384,6 +385,10 @@ final class PresetTransfer
     private function assert_same(mixed $input, mixed $normalized, string $path): void
     {
         if (is_array($input) && is_array($normalized)) {
+            if (preg_match('/^preset\.mappings\.\d+(?:\.children\.\d+)*\.options$/', $path)
+                && !array_key_exists('join_datetime', $input) && ($normalized['join_datetime'] ?? null) === false) {
+                $input['join_datetime'] = false;
+            }
             if (count($input) !== count($normalized) || array_diff(array_keys($input), array_keys($normalized))) {
                 throw new \InvalidArgumentException(sprintf(__('Missing, unknown, or excessive settings at %s.', 'post-press-api'), $path));
             }

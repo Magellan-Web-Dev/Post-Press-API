@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace PostPressAPI\Integration\ACF;
 
+if (!defined('ABSPATH')) exit;
+
 use PostPressAPI\Sync\ValueComparator;
 use PostPressAPI\Sync\WriteError;
-
-if (!defined('ABSPATH')) exit;
 
 /**
  * Writes ACF values through ACF's own API using field keys.

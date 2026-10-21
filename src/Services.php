@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace PostPressAPI;
 
+if (!defined('ABSPATH')) exit;
+
 use PostPressAPI\Http\ApiClient;
 use PostPressAPI\Http\RequestBuilder;
 use PostPressAPI\Integration\ACF\AcfFields;
@@ -35,8 +37,6 @@ use PostPressAPI\Sync\RecordProcessor;
 use PostPressAPI\Sync\ResponseReader;
 use PostPressAPI\Sync\RunLock;
 use PostPressAPI\Sync\RunRepository;
-
-if (!defined('ABSPATH')) exit;
 
 /**
  * Lazily constructed services shared by the admin screens, REST routes, and cron handlers.

@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace PostPressAPI\Sync;
 
+if (!defined('ABSPATH')) exit;
+
 use PostPressAPI\Http\ApiClient;
 use PostPressAPI\Mapping\DestinationRegistry;
 use PostPressAPI\Mapping\SourcePathDiscovery;
 use PostPressAPI\Mapping\ValueInspector;
 use PostPressAPI\Support\Redactor;
-
-if (!defined('ABSPATH')) exit;
 
 /**
  * Test Request and Preview/Dry Run.

@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace PostPressAPI\Sync;
 
+if (!defined('ABSPATH')) exit;
+
 use PostPressAPI\Mapping\CoreFields;
 use PostPressAPI\Mapping\MappedRecord;
 use PostPressAPI\Mapping\MappingEngine;
 use PostPressAPI\Presets\PresetSchema;
 use PostPressAPI\Support\Clock;
-
-if (!defined('ABSPATH')) exit;
 
 /**
  * Imports one record: identity → mapping → matching → change detection → writes.

@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace PostPressAPI\Http;
 
+if (!defined('ABSPATH')) exit;
+
 use PostPressAPI\Presets\PresetSchema;
 use PostPressAPI\Support\Clock;
 use PostPressAPI\Support\Redactor;
-
-if (!defined('ABSPATH')) exit;
 
 /**
  * Fetches and decodes one page of JSON from a preset's endpoint.

@@ -87,7 +87,7 @@ final class Transformer
             self::BOOLEAN  => self::to_bool($value),
             self::URL      => self::to_url($value),
             self::EMAIL    => self::to_email($value),
-            self::JOIN     => self::join($value, self::decode_separator((string) ($options['separator'] ?? ', '))),
+            self::JOIN     => self::join($value, self::decode_separator((string) ($options['separator'] ?? ', ')), $options, $site_tz),
             self::JSON     => self::to_json($value),
             self::DATETIME => self::to_datetime($value, $options, $site_tz),
             default        => throw new MappingError(sprintf(
@@ -346,26 +346,49 @@ final class Transformer
     }
 
     /**
-     * Joins a list of scalars. Null items are skipped; nested arrays are rejected.
+     * Joins scalars, optionally parsing and formatting each item as a date/time.
      *
-     * @param mixed  $value     List or scalar.
-     * @param string $separator Separator (already decoded).
+     * Null items are skipped; nested arrays are rejected. Date-only values keep
+     * their calendar day, using the same rules as the Date/time transformation.
+     * With date formatting off, the historical plain-text behavior is unchanged.
+     *
+     * @param mixed                 $value     List or scalar.
+     * @param string                $separator Separator (already decoded).
+     * @param array<string, mixed>  $options   Row options, including join_datetime.
+     * @param \DateTimeZone|null    $site_tz   Site time zone; defaults to WordPress's zone.
      *
      * @return string
+     *
+     * @throws MappingError When an item cannot be converted; identifies its position.
      */
-    public static function join(mixed $value, string $separator): string
+    public static function join(mixed $value, string $separator, array $options = [], ?\DateTimeZone $site_tz = null): string
     {
         $items = is_array($value) ? $value : [$value];
         $parts = [];
+        $format_dates = !empty($options['join_datetime']);
+        if ($format_dates) {
+            $site_tz ??= wp_timezone();
+        }
 
-        foreach ($items as $item) {
+        foreach (array_values($items) as $index => $item) {
             if ($item === null) {
                 continue;
             }
             if (is_array($item)) {
                 throw new MappingError(__('Join can only combine text, numbers, and booleans; this list contains nested arrays or objects. Select a field inside each item, for example items[*].name.', 'post-press-api'));
             }
-            $parts[] = self::to_display_string($item);
+            try {
+                $parts[] = $format_dates
+                    ? self::stringify(self::to_datetime($item, $options, $site_tz), $site_tz)
+                    : self::to_display_string($item);
+            } catch (MappingError $error) {
+                throw new MappingError(sprintf(
+                    /* translators: 1: one-based list item position, 2: conversion error. */
+                    __('Join item %1$d: %2$s', 'post-press-api'),
+                    $index + 1,
+                    $error->getMessage()
+                ));
+            }
         }
 
         return implode($separator, $parts);

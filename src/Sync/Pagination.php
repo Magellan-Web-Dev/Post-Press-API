@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace PostPressAPI\Sync;
 
+if (!defined('ABSPATH')) exit;
+
 use PostPressAPI\Mapping\MappingError;
 use PostPressAPI\Mapping\PathResolver;
 use PostPressAPI\Mapping\Transformer;
 use PostPressAPI\Mapping\ValueInspector;
 use PostPressAPI\Presets\PresetSchema;
-
-if (!defined('ABSPATH')) exit;
 
 /**
  * Offset/limit and page-number pagination.

@@ -4,7 +4,7 @@ Fetch JSON records from external APIs — manually or on a schedule — and map 
 
 - **Requires:** WordPress 6.0+, PHP 8.1+
 - **Optional:** Advanced Custom Fields (free or PRO). Repeater fields require ACF PRO.
-- **Version:** 1.0.3
+- **Version:** 1.0.4
 
 Post Press API makes **outbound** requests only. Receiving webhooks and two-way synchronization are out of scope for this version.
 
@@ -112,6 +112,8 @@ Each mapping row has:
 
 Each destination can be mapped once per level. Mappings default to **keep the existing value**, so missing or null source data never erases what a post already has.
 
+Reorder rows with **Move up / Move down**, or enter a whole number in **Move to position** and click **Move** (or press Enter). Positions start at 1 and cannot exceed the number of mappings in that list. Other rows shift to make room, and settings and child mappings stay with the moved row. Nested mappings move only within their own group or repeater. Save the preset to keep the new order.
+
 ### Transformations
 
 | Transformation | Result |
@@ -121,7 +123,7 @@ Each destination can be mapped once per level. Mappings default to **keep the ex
 | Integer / Decimal number | Numeric conversion; non-numbers and fractional integers are errors. Decimal can round. |
 | Boolean | `true/false`, `1/0`, `yes/no`, `on/off`; anything else is an error. |
 | Validate URL / Validate email | Must be a valid http(s) URL or email address. |
-| Join list into text | Joins a list with a separator (`\n` = new line, `\t` = tab). Null items are skipped; nested lists are errors. |
+| Join list into text | Joins a list with a separator (`\n` = new line, `\t` = tab). Optionally format each item as a date/time before joining, using the input/output formats and time zones. Null items are skipped; nested lists are errors. |
 | JSON encode | Encodes any value as JSON text. |
 | Date/time | Parses a date/time with an optional input format and input time zone, and optional output format and output time zone. |
 | Value map | Converts listed values (`approved` → `publish`); unlisted values are kept, replaced by the fallback, or rejected. |
@@ -147,6 +149,10 @@ Any meta key made of letters, numbers, `_`, `-`, `.`, or `:` can be mapped, exce
 Meta values are stored as text and filtered with `wp_kses_post` (JSON-transformed values are stored exactly). Arrays need a Join or JSON transformation.
 
 ### Dates and time zones
+
+To turn session dates into **November 18, November 20, December 2**, use source path `sessions[*].date`, choose **Join list into text**, enable **Format each item as a date/time before joining**, set **Output format** to `F j`, and keep **Separator** as `, `. For ISO dates such as `2026-11-18`, leave Input format blank or use `Y-m-d`. Map the result to a text field, textarea, or custom meta key.
+
+The same option works for times: `sessions[*].time` with input format `H:i` and output format `g:i A` produces values such as `6:30 PM`. An empty list produces empty text; invalid non-null dates fail the mapping and identify the failing item's position. Existing Join mappings keep joining plain values until this option is enabled. Missing/null source and fallback rules still apply; fallback text is already formatted and skips transformations.
 
 Values without an offset are read in the mapping's input time zone, or the site time zone when none is set. ISO 8601 values with an offset (`2026-10-18T20:05:37+00:00`, `…Z`) are converted to the output (or site) time zone. Date-only values such as `2026-11-05` are never shifted between days.
 
@@ -259,7 +265,7 @@ A working configuration (field names are examples — choose your site's own fie
 Notes for this payload:
 
 - `"status": "received"` is not a WordPress status. Leave it unmapped (new posts use *Status for new posts*), or map it with a Value map such as `approved → publish` and a `draft` fallback.
-- `"timezone": "Eastern"` is not interpreted. If you need time-zone conversion for `sessions[*].time`, use the Date/time transformation with the input time zone set to `America/New_York`.
+- `"timezone": "Eastern"` is not interpreted. For `sessions[*].time`, choose Join list into text, enable date/time formatting, and set the input time zone to `America/New_York`. For a single value such as `sessions[0].time`, choose Date/time.
 - `updated_at`, `submitted_at`, and other unmapped fields never cause updates.
 
 ## Duplicates, matching, and updates
@@ -441,6 +447,15 @@ php tests/run.php Sync       # files whose name contains "Sync"
 
 It uses in-memory WordPress, ACF, and `$wpdb` stubs that reproduce the behaviors that matter here (meta unslashing, `false` returns for unchanged values, values stored as strings, ACF repeater storage, cron duplicate rules, response truncation) and mocked HTTP responses based on the sample payload. Each test file runs in its own PHP process so some files can run without ACF loaded. Any PHP warning or deprecation fails the test that caused it.
 
+The mapping editor also has DOM integration tests that load the actual PHP-rendered editor and admin script with jsdom. Install the test dependency outside the plugin:
+
+```sh
+npm install --prefix /tmp/ppapi-mapping-ui --no-audit --no-fund jsdom@26.1.0
+NODE_PATH=/tmp/ppapi-mapping-ui/node_modules node --test tests/admin-mappings.test.cjs
+```
+
+These cover date option controls, moving across a 30-row list, nested mappings, keyboard use, invalid positions, and serialized settings after reload. They use the same WordPress stubs and do not access a live site.
+
 Note: the repository's `.gitignore` excludes `/tests/`, so the suite is kept locally and is not part of releases.
 
 ## Building a release zip
@@ -464,6 +479,12 @@ This writes `build/post-press-api-<version>.zip` with a single top-level `post-p
 - On multisite, schedules are per site; activate the plugin per site rather than network-wide.
 
 ## Changelog
+
+### 1.0.4
+
+- **Date formatting inside Join.** Optionally parse and format each list item before joining, with input/output formats and time zones. For example, `sessions[*].date` with output `F j` produces `November 18, November 20, December 2`. Existing joins and fingerprints are preserved, and older preset exports still import.
+- **Numeric mapping order.** Move a mapping directly to a numbered position with the Move button or Enter, including within nested groups and repeaters. Row settings and children stay attached.
+- **Consistent class guards.** Every namespaced class places its `ABSPATH` guard immediately after the namespace and before imports.
 
 ### 1.0.3
 

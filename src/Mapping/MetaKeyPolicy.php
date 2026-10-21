@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace PostPressAPI\Mapping;
 
-use PostPressAPI\Integration\ACF\AcfFields;
-
 if (!defined('ABSPATH')) exit;
+
+use PostPressAPI\Integration\ACF\AcfFields;
 
 /**
  * Decides which custom meta keys a mapping may write.
