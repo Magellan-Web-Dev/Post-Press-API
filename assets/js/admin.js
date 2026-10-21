@@ -223,6 +223,51 @@
 		}
 	}
 
+	function bindHistory(node) {
+		if (!apiFetch) { return; }
+		node.addEventListener('input', function (event) { event.stopPropagation(); });
+		node.addEventListener('change', function (event) {
+			event.stopPropagation();
+			var boxes = Array.from(node.querySelectorAll('[data-history-id]'));
+			var all = node.querySelector('[data-history-select-all]');
+			if (event.target === all) { boxes.forEach(function (box) { box.checked = all.checked; }); }
+			var count = boxes.filter(function (box) { return box.checked; }).length;
+			if (all) { all.checked = boxes.length > 0 && count === boxes.length; all.indeterminate = count > 0 && count < boxes.length; }
+			var selected = node.querySelector('[data-history-action="selected"]');
+			if (selected) { selected.disabled = count === 0; }
+		});
+		node.addEventListener('click', function (event) {
+			var button = event.target.closest('[data-history-action]');
+			if (!button || button.disabled) { return; }
+			event.preventDefault();
+			var action = button.getAttribute('data-history-action');
+			var ids = action === 'one' ? [button.getAttribute('data-run-id')] : Array.from(node.querySelectorAll('[data-history-id]:checked')).map(function (box) { return box.getAttribute('data-history-id'); });
+			if (action !== 'all' && !ids.length) { return; }
+			if (!window.confirm(node.getAttribute('data-confirm'))) { return; }
+			node.querySelectorAll('button,input').forEach(function (control) { control.disabled = true; });
+			apiFetch({
+				path: '/ppapi/v1/presets/' + encodeURIComponent(node.getAttribute('data-preset')) + '/history/delete', method: 'POST',
+				headers: { 'X-WP-Nonce': node.getAttribute('data-rest-nonce') },
+				data: { run_ids: ids, clear_all: action === 'all', history_nonce: node.getAttribute('data-nonce'), limit: Number(node.getAttribute('data-limit')) }
+			}).then(function (response) {
+				// HTML is rendered and escaped by our authenticated history endpoint.
+				var parsed = new DOMParser().parseFromString(response.html, 'text/html');
+				var replacement = parsed.querySelector('[data-ppapi-history]');
+				if (!replacement) { throw new Error('Invalid history response.'); }
+				node.replaceWith(replacement);
+				bindHistory(replacement);
+				var feedback = replacement.querySelector('.ppapi-history-feedback');
+				feedback.textContent = response.message;
+				feedback.tabIndex = -1;
+				feedback.focus();
+			}).catch(function (error) {
+				node.querySelectorAll('button,input').forEach(function (control) { control.disabled = false; });
+				node.querySelector('.ppapi-history-feedback').textContent = error.message || String(error);
+			});
+		});
+	}
+	document.querySelectorAll('[data-ppapi-history]').forEach(bindHistory);
+
 	if (!data) {
 		return;
 	}
@@ -290,6 +335,7 @@
 			options: options,
 			on_missing: row.on_missing || 'preserve',
 			on_null: row.on_null || 'preserve',
+			media: Object.assign({ download: false, output: 'id' }, row.media || {}),
 			fallback: row.fallback === undefined || row.fallback === null ? '' : String(row.fallback),
 			children: (row.children || []).map(normalizeRow)
 		};
@@ -587,6 +633,22 @@
 					destCol.appendChild(el('p', { className: 'ppapi-text-warning', text: descriptor.reason }));
 				}
 			}
+		}
+		var mediaCompatible = row.target_type === 'meta' || (row.target_type === 'core' && row.target === 'featured_image') || (descriptor && ['image', 'url', 'text', 'textarea'].indexOf(descriptor.type) !== -1);
+		if (mediaCompatible) {
+			var mediaToggle = el('input', { type: 'checkbox', id: base + '-media', checked: row.media.download });
+			mediaToggle.addEventListener('change', function () { row.media.download = mediaToggle.checked; renderMappings(); });
+			destCol.appendChild(el('label', { for: base + '-media' }, [mediaToggle, ' ' + i18n.downloadImage]));
+			if (row.media.download) {
+				if (row.target_type === 'meta') {
+					destCol.appendChild(select(base + '-media-output', i18n.mediaOutput, [['id', i18n.attachmentId], ['url', i18n.localMediaUrl]], row.media.output, function (value) { row.media.output = value; sync(); }));
+				} else {
+					row.media.output = row.target_type === 'core' || descriptor.type === 'image' ? 'id' : 'url';
+				}
+				destCol.appendChild(el('p', { className: 'description', text: i18n.imageHelp }));
+			}
+		} else {
+			row.media.download = false;
 		}
 		fieldset.appendChild(destCol);
 

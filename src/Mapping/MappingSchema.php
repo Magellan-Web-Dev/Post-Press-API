@@ -133,6 +133,10 @@ final class MappingSchema
             'on_missing'  => self::choice($row['on_missing'] ?? '', self::BEHAVIORS, self::PRESERVE),
             'on_null'     => self::choice($row['on_null'] ?? '', self::BEHAVIORS, self::PRESERVE),
             'fallback'    => self::text($row['fallback'] ?? '', self::MAX_TEXT),
+            'media'       => [
+                'download' => !empty($row['media']['download']),
+                'output' => self::choice($row['media']['output'] ?? 'id', ['id', 'url'], 'id'),
+            ],
             'children'    => $depth + 1 < self::MAX_DEPTH ? self::normalize_rows($row['children'] ?? [], $depth + 1) : [],
         ];
     }
@@ -152,6 +156,10 @@ final class MappingSchema
         foreach ($rows as $row) {
             $copy = $row;
             unset($copy['id']);
+            // Off is the historical behavior: do not invalidate existing fingerprints.
+            if (empty($copy['media']['download'])) {
+                unset($copy['media']);
+            }
             $copy['children'] = self::fingerprint_config($row['children'] ?? []);
             $config[]         = $copy;
         }

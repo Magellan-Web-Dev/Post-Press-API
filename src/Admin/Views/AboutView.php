@@ -58,8 +58,10 @@ final class AboutView
                 <a href="#ppapi-about-paths"><?php esc_html_e('Paths', 'post-press-api'); ?></a>
                 <a href="#ppapi-about-mappings"><?php esc_html_e('Mappings', 'post-press-api'); ?></a>
                 <a href="#ppapi-about-acf"><?php esc_html_e('ACF', 'post-press-api'); ?></a>
+                <a href="#ppapi-about-images"><?php esc_html_e('Images', 'post-press-api'); ?></a>
                 <a href="#ppapi-about-duplicates"><?php esc_html_e('Duplicates', 'post-press-api'); ?></a>
                 <a href="#ppapi-about-runs"><?php esc_html_e('Runs & schedules', 'post-press-api'); ?></a>
+                <a href="#ppapi-about-transfer"><?php esc_html_e('Export & import', 'post-press-api'); ?></a>
                 <a href="#ppapi-about-example"><?php esc_html_e('Example', 'post-press-api'); ?></a>
                 <a href="#ppapi-about-security"><?php esc_html_e('Security', 'post-press-api'); ?></a>
                 <a href="#ppapi-about-limits"><?php esc_html_e('Limits', 'post-press-api'); ?></a>
@@ -72,8 +74,10 @@ final class AboutView
             $this->paths();
             $this->mappings();
             $this->acf();
+            $this->images();
             $this->duplicates();
             $this->runs();
+            $this->transfer();
             $this->example();
             $this->security();
             $this->limits();
@@ -210,7 +214,8 @@ final class AboutView
             [__('Map the fields', 'post-press-api'), __('Choose the destination post type, the status and author for new posts, and add mappings from source paths to post fields, custom meta, or ACF fields. Add transformations where values need converting.', 'post-press-api')],
             [__('Preview with a dry run', 'post-press-api'), __('Preview / dry run shows, record by record, whether a post would be created, updated, left unchanged, skipped, or rejected — with every source value, its type, and the value that would be written. Nothing is saved.', 'post-press-api')],
             [__('Enable and run', 'post-press-api'), __('Save, tick Enabled once the editor no longer lists missing settings, and save again. Use Run now, or pick a schedule to run automatically.', 'post-press-api')],
-            [__('Monitor', 'post-press-api'), __('The preset list shows each preset\'s last result and next run. History lists the last runs with created, updated, unchanged, skipped, and failed counts, and the Activity Log records errors and scheduling events.', 'post-press-api')],
+            [__('Monitor', 'post-press-api'), __('The preset list shows each preset\'s last result and next run. History lists the last runs with created, updated, unchanged, skipped, and failed counts (delete entries you no longer need), and the Activity Log records errors and scheduling events.', 'post-press-api')],
+            [__('Reuse on other sites', 'post-press-api'), __('Export JSON downloads a preset\'s settings without credentials. On another site, Import preset JSON reviews the local post type, author, and ACF fields, then creates a disabled copy.', 'post-press-api')],
         ];
         ?>
         <section class="ppapi-card" id="ppapi-about-setup" aria-labelledby="ppapi-about-setup-heading">
@@ -239,7 +244,9 @@ final class AboutView
             [__('Preview / dry run', 'post-press-api'), __('Run the same identity, mapping, matching, and change detection as a real import without writing posts, meta, attachments, or tracking data.', 'post-press-api')],
             [__('Pagination & batches', 'post-press-api'), __('Follow offset/limit or page-number pagination until the API reports no more records. Large imports run in small saved batches and resume in the background.', 'post-press-api')],
             [__('Schedules', 'post-press-api'), __('Run manually, every 5 or 15 minutes, hourly, twice daily, daily, or on a custom interval of 5 minutes or more.', 'post-press-api')],
-            [__('History & logging', 'post-press-api'), __('Per-preset run history with record counts and failed-record details, plus a bounded activity log — never containing credentials or payloads.', 'post-press-api')],
+            [__('Media Library images', 'post-press-api'), __('Download image URLs into the Media Library for featured images, ACF image fields, URL/text fields, and custom meta. Images are reused by URL, so re-runs never create copies.', 'post-press-api')],
+            [__('History & logging', 'post-press-api'), __('Per-preset run history with record counts and failed-record details — delete one, selected, or all runs — plus a bounded activity log, never containing credentials or payloads.', 'post-press-api')],
+            [__('Preset export & import', 'post-press-api'), __('Move presets between sites as JSON files. Credentials are never exported; imports match local ACF fields and the author, and always start disabled.', 'post-press-api')],
             [__('Security built in', 'post-press-api'), __('Administrator-only screens, nonces, server-side requests to public addresses only, credentials stored server-side and never shown again, and no credentials sent to other hosts.', 'post-press-api')],
         ];
         ?>
@@ -315,7 +322,7 @@ final class AboutView
             <h2 id="ppapi-about-mappings-heading"><?php esc_html_e('Mappings: where values go', 'post-press-api'); ?></h2>
             <p><?php esc_html_e('Each mapping reads a source — a path, a constant, or a template — optionally transforms it, and writes it to one destination:', 'post-press-api'); ?></p>
             <ul class="ppapi-list">
-                <li><strong><?php esc_html_e('Post fields:', 'post-press-api'); ?></strong> <?php esc_html_e('title, content, excerpt, slug, publish date, status, and author. Content and excerpt keep the formatting WordPress allows in posts; scripts are removed. IDs and other internal properties can never be set.', 'post-press-api'); ?></li>
+                <li><strong><?php esc_html_e('Post fields:', 'post-press-api'); ?></strong> <?php esc_html_e('featured image, title, content, excerpt, slug, publish date, status, and author. Content and excerpt keep the formatting WordPress allows in posts; scripts are removed. The featured image takes a local image attachment ID, or an image URL when Download image URL to Media Library is enabled. IDs and other internal properties can never be set.', 'post-press-api'); ?></li>
                 <li><strong><?php esc_html_e('Custom meta:', 'post-press-api'); ?></strong> <?php esc_html_e('any meta key you name, except WordPress control keys, Post Press API\'s own _ppapi_ keys, and keys that belong to ACF fields.', 'post-press-api'); ?></li>
                 <li><strong><?php esc_html_e('ACF fields:', 'post-press-api'); ?></strong> <?php esc_html_e('fields registered for the chosen post type, written through ACF itself (see below).', 'post-press-api'); ?></li>
             </ul>
@@ -344,7 +351,8 @@ final class AboutView
             [__('Color picker, link', 'post-press-api'), __('Hex colors; links from a URL or a url/title/target object.', 'post-press-api')],
             [__('Group', 'post-press-api'), __('Sub field mappings read inside the group\'s source object; unmapped sub fields are kept.', 'post-press-api')],
             [__('Repeater (ACF PRO)', 'post-press-api'), __('One row per item of a source list; sub mappings read inside each item, so values from the same item (such as a session\'s date and time) stay in the same row.', 'post-press-api')],
-            [__('Image, file, gallery, relationship, post object, page link, taxonomy, user, flexible content, clone', 'post-press-api'), __('Not supported — shown disabled with the reason. Map media URLs to a URL or text field instead.', 'post-press-api')],
+            [__('Image', 'post-press-api'), __('Stores an attachment ID: a local image attachment ID from the source, or a remote image URL downloaded to the Media Library. Works inside groups and repeaters too.', 'post-press-api')],
+            [__('File, gallery, relationship, post object, page link, taxonomy, user, flexible content, clone', 'post-press-api'), __('Not supported — shown disabled with the reason. Use an image field for individual images.', 'post-press-api')],
         ];
         ?>
         <section class="ppapi-card" id="ppapi-about-acf" aria-labelledby="ppapi-about-acf-heading">
@@ -352,6 +360,32 @@ final class AboutView
             <p><?php esc_html_e('When you choose a post type, the editor lists the ACF field groups assigned to it, with each field\'s label, name, key, type, and parent. Values are saved with ACF\'s update_field() using field keys, so ACF links them correctly even on brand-new posts. Field keys always come from this site; nothing is created for you.', 'post-press-api'); ?></p>
             <?php $this->table([__('Field types', 'post-press-api'), __('How they are filled', 'post-press-api')], $rows); ?>
             <p><?php esc_html_e('If ACF is deactivated or a field a preset needs disappears, only that preset stops — with an explanation in its history. Presets that only use post fields and custom meta never need ACF.', 'post-press-api'); ?></p>
+        </section>
+        <?php
+    }
+
+    private function images(): void
+    {
+        $rows = [
+            [__('Featured image', 'post-press-api'), __('The attachment ID, set as the post thumbnail.', 'post-press-api')],
+            [__('ACF image field', 'post-press-api'), __('The attachment ID.', 'post-press-api')],
+            [__('ACF URL, text, or text area field', 'post-press-api'), __('The local Media Library URL.', 'post-press-api')],
+            [__('Custom meta', 'post-press-api'), __('Your choice: the attachment ID or the local media URL.', 'post-press-api')],
+        ];
+        ?>
+        <section class="ppapi-card" id="ppapi-about-images" aria-labelledby="ppapi-about-images-heading">
+            <h2 id="ppapi-about-images-heading"><?php esc_html_e('Importing images into the Media Library', 'post-press-api'); ?></h2>
+            <p><?php esc_html_e('Tick Download image URL to Media Library on a mapping to turn a remote image URL into a local image. During a run the image is downloaded, saved to the Media Library, attached to the post, and the field receives a local value:', 'post-press-api'); ?></p>
+            <?php $this->table([__('Destination', 'post-press-api'), __('Value written', 'post-press-api')], $rows); ?>
+            <ul class="ppapi-list">
+                <li><?php esc_html_e('Images are reused by their full source URL (including query strings), across records and presets, as long as the file still exists — re-runs never create copies.', 'post-press-api'); ?></li>
+                <li><?php esc_html_e('Images are only downloaded when a record is created or updated. Test request, dry runs, and preset imports never download anything; previews show the URL with its query string hidden.', 'post-press-api'); ?></li>
+                <li><?php esc_html_e('Public http(s) addresses only, at most three redirects, and never with the preset\'s credentials, headers, or cookies.', 'post-press-api'); ?></li>
+                <li><?php esc_html_e('JPEG, PNG, GIF, WebP, or AVIF images allowed by WordPress, up to 10 MB (or the site\'s upload limit) and 40 megapixels. The real file type is checked, so URLs without an extension work.', 'post-press-api'); ?></li>
+                <li><?php esc_html_e('All images of a record are fetched before any image field is written and share a 12-second budget, so a failed download leaves existing images in place and the record is retried on the next run.', 'post-press-api'); ?></li>
+                <li><?php esc_html_e('Missing/null rules apply as usual; a fallback must be an image URL. Without the download option, the featured image and ACF image fields accept only a local image attachment ID.', 'post-press-api'); ?></li>
+                <li><?php esc_html_e('Presets that download images also need the upload_files capability, for you and for the preset\'s default author. Replaced images are never deleted from the Media Library.', 'post-press-api'); ?></li>
+            </ul>
         </section>
         <?php
     }
@@ -401,6 +435,7 @@ final class AboutView
                     );
                     ?>
                 </li>
+                <li><?php esc_html_e('On the History screen and in the editor\'s Recent runs, delete a single run, tick runs and choose Delete selected, or clear all retained history for the preset. Only the summaries are removed: posts, media, and active runs are kept.', 'post-press-api'); ?></li>
             </ul>
             <h3><?php esc_html_e('Dependable schedules', 'post-press-api'); ?></h3>
             <p><?php esc_html_e('Scheduled presets use WP-Cron, which only runs when someone visits the site, so times are approximate. For dependable timing, disable the visit trigger and have the server call WordPress cron every few minutes:', 'post-press-api'); ?></p>
@@ -409,6 +444,26 @@ define('DISABLE_WP_CRON', true);
 
 # server crontab
 */5 * * * * curl -fsS "<?php echo esc_html(site_url('wp-cron.php?doing_wp_cron')); ?>" &gt;/dev/null</code></pre>
+        </section>
+        <?php
+    }
+
+    private function transfer(): void
+    {
+        ?>
+        <section class="ppapi-card" id="ppapi-about-transfer" aria-labelledby="ppapi-about-transfer-heading">
+            <h2 id="ppapi-about-transfer-heading"><?php esc_html_e('Exporting and importing presets', 'post-press-api'); ?></h2>
+            <p><?php esc_html_e('Presets can be copied to other WordPress sites as JSON files.', 'post-press-api'); ?></p>
+            <ul class="ppapi-list">
+                <li><?php esc_html_e('Export: choose Export JSON in the preset list or the editor header. The file holds the saved request, response, destination, mappings, duplicate rules, pagination, schedule, and batch size, and optionally the saved sample JSON.', 'post-press-api'); ?></li>
+                <li><?php esc_html_e('Stored credentials, history, run state, posts, and media are never exported. Values typed directly into URLs, headers, bodies, mappings, or samples are included, so review the file before sharing it.', 'post-press-api'); ?></li>
+                <li><?php esc_html_e('Import: click Import preset JSON above the preset list and upload the file (up to 2 MB). Files from an unsupported version, or with settings that would be changed or truncated, are rejected rather than altered.', 'post-press-api'); ?></li>
+                <li><?php esc_html_e('Review the local post type, the author (matched by login), and a local ACF field for each ACF mapping. Fields are matched by key or by a unique name, type, and parent path; choose the rest yourself and use Refresh matches after changing the post type or a parent field.', 'post-press-api'); ?></li>
+                <li><?php esc_html_e('The imported preset gets a new ID and starts disabled. Re-enter its credentials before enabling it. Importing never fetches data or downloads images, and existing posts are not linked automatically — use Connect existing posts if the new preset should take them over.', 'post-press-api'); ?></li>
+            </ul>
+            <p>
+                <a class="button" href="<?php echo esc_url(AdminPage::url(['view' => 'import'])); ?>"><?php esc_html_e('Import preset JSON', 'post-press-api'); ?></a>
+            </p>
         </section>
         <?php
     }
@@ -451,6 +506,8 @@ define('DISABLE_WP_CRON', true);
                 <li><?php esc_html_e('Requests are made by this server to public addresses only, with TLS certificate checks on. Credentials are only sent to https:// endpoints and never follow a redirect to another host.', 'post-press-api'); ?></li>
                 <li><?php esc_html_e('Tokens and API keys are stored server-side, separately from the preset, and never shown again: leave the field blank to keep a saved credential, or remove it explicitly. Changing the endpoint host requires entering the credential again.', 'post-press-api'); ?></li>
                 <li><?php esc_html_e('Previews, history, and the activity log never contain credentials (even if an API echoes one back) and never store full payloads.', 'post-press-api'); ?></li>
+                <li><?php esc_html_e('Image downloads go to public addresses only, never carry the preset\'s credentials, and are checked for size and real image type before WordPress stores them. Attachments keep only a hash of the source URL.', 'post-press-api'); ?></li>
+                <li><?php esc_html_e('Preset exports never include stored credentials. Imported files are validated strictly and always create a new, disabled preset.', 'post-press-api'); ?></li>
                 <li>
                     <?php
                     printf(
@@ -460,7 +517,7 @@ define('DISABLE_WP_CRON', true);
                     );
                     ?>
                 </li>
-                <li><?php esc_html_e('Deactivating stops scheduled runs but keeps presets, history, and posts. Deleting the plugin removes its settings and history but never the posts it imported.', 'post-press-api'); ?></li>
+                <li><?php esc_html_e('Deactivating stops scheduled runs but keeps presets, history, posts, and images. Deleting the plugin removes its settings and history but never the posts or Media Library images it imported.', 'post-press-api'); ?></li>
             </ul>
         </section>
         <?php
@@ -474,7 +531,8 @@ define('DISABLE_WP_CRON', true);
             <ul class="ppapi-list">
                 <li><?php esc_html_e('Receiving webhooks or sending changes back to the API (imports are one-way and outbound).', 'post-press-api'); ?></li>
                 <li><?php esc_html_e('Cursor or Link-header pagination.', 'post-press-api'); ?></li>
-                <li><?php esc_html_e('Downloading media: featured images and ACF image, file, and gallery fields.', 'post-press-api'); ?></li>
+                <li><?php esc_html_e('ACF file and gallery fields, and removing replaced images from the Media Library.', 'post-press-api'); ?></li>
+                <li><?php esc_html_e('Transferring posts, media, or history between sites (preset files contain configuration only).', 'post-press-api'); ?></li>
                 <li><?php esc_html_e('ACF relationship-type, flexible content, and clone fields.', 'post-press-api'); ?></li>
                 <li><?php esc_html_e('Encrypting stored credentials (WordPress has no built-in secret storage); protect database access and backups.', 'post-press-api'); ?></li>
             </ul>

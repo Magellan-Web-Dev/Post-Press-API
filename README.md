@@ -4,7 +4,7 @@ Fetch JSON records from external APIs — manually or on a schedule — and map 
 
 - **Requires:** WordPress 6.0+, PHP 8.1+
 - **Optional:** Advanced Custom Fields (free or PRO). Repeater fields require ACF PRO.
-- **Version:** 1.0.0
+- **Version:** 1.0.3
 
 Post Press API makes **outbound** requests only. Receiving webhooks and two-way synchronization are out of scope for this version.
 
@@ -18,18 +18,22 @@ Post Press API makes **outbound** requests only. Receiving webhooks and two-way 
 4. [Path syntax](#path-syntax)
 5. [Field mappings](#field-mappings)
 6. [ACF fields](#acf-fields)
-7. [Example: the sample events payload](#example-the-sample-events-payload)
-8. [Duplicates, matching, and updates](#duplicates-matching-and-updates)
-9. [Pagination and execution](#pagination-and-execution)
-10. [Scheduling and WP-Cron](#scheduling-and-wp-cron)
-11. [Security and data handling](#security-and-data-handling)
-12. [Deactivation and uninstall](#deactivation-and-uninstall)
-13. [GitHub updates](#github-updates)
-14. [Hooks for developers](#hooks-for-developers)
-15. [Architecture](#architecture)
-16. [Tests](#tests)
-17. [Building a release zip](#building-a-release-zip)
-18. [Limitations](#limitations)
+7. [Importing images into the Media Library](#importing-images-into-the-media-library)
+8. [Example: the sample events payload](#example-the-sample-events-payload)
+9. [Duplicates, matching, and updates](#duplicates-matching-and-updates)
+10. [Pagination and execution](#pagination-and-execution)
+11. [Run history](#run-history)
+12. [Exporting and importing presets](#exporting-and-importing-presets)
+13. [Scheduling and WP-Cron](#scheduling-and-wp-cron)
+14. [Security and data handling](#security-and-data-handling)
+15. [Deactivation and uninstall](#deactivation-and-uninstall)
+16. [GitHub updates](#github-updates)
+17. [Hooks for developers](#hooks-for-developers)
+18. [Architecture](#architecture)
+19. [Tests](#tests)
+20. [Building a release zip](#building-a-release-zip)
+21. [Limitations](#limitations)
+22. [Changelog](#changelog)
 
 ---
 
@@ -62,9 +66,9 @@ The plugin never registers post types or fields. Create the destination post typ
 | 4. Duplicate handling | Duplicate policy, connecting existing posts, trashed posts. |
 | 5. Pagination | None, offset/limit, or page number; stop conditions and safety limits. |
 | 6. Schedule | Manual, every 5/15 minutes, hourly, twice daily, daily, or a custom interval (minimum 5 minutes); records per batch. |
-| 7. Preview & run | Dry run, Run now (optionally re-applying values to unchanged posts), cancel, recent runs. |
+| 7. Preview & run | Dry run, Run now (optionally re-applying values to unchanged posts), cancel, recent runs (which can be deleted here). |
 
-The preset list shows each preset's enabled state, destination, schedule, last run, next run (in the site time zone), and last result. Row actions: Edit, Duplicate (the copy starts disabled), Enable/Disable, History, Delete.
+The preset list shows each preset's enabled state, destination, schedule, last run, next run (in the site time zone), and last result. Row actions: Edit, Export JSON, Duplicate (the copy starts disabled), Enable/Disable, History, Delete. The **Import preset JSON** button above the list imports a preset exported from another site (see [Exporting and importing presets](#exporting-and-importing-presets)). The editor header links to **Export JSON** and **Run history** for the open preset.
 
 Validation errors are listed in a summary at the top of the editor (each linked to its field) and next to the field itself. Incomplete presets can be saved as drafts; they cannot be enabled or run until complete.
 
@@ -103,7 +107,8 @@ Each mapping row has:
 | Destination | **Post field**, **Custom meta** key, or **ACF field**. |
 | Transformation | See below. |
 | When missing / when null | **Keep the existing value** (default), **Clear the field**, **Use the fallback value**, or **Mark the record as failed**. Repeater sub fields offer *Leave empty in this row* and *Skip this repeater row* instead of *Keep*. |
-| Fallback | A literal value. Fallbacks skip the transformation and are validated by the destination, so write them in the destination's format (for example `20261105` for an ACF date field, `draft` for status). |
+| Fallback | A literal value. Fallbacks skip the transformation and are validated by the destination, so write them in the destination's format (for example `20261105` for an ACF date field, `draft` for status). When the image download option is on, the fallback must be an image URL. |
+| Download image URL to Media Library | Offered for the Featured image, custom meta, and ACF image/URL/text/textarea fields (including sub fields). See [Importing images into the Media Library](#importing-images-into-the-media-library). |
 
 Each destination can be mapped once per level. Mappings default to **keep the existing value**, so missing or null source data never erases what a post already has.
 
@@ -125,7 +130,9 @@ No mapping ever evaluates PHP, JavaScript, or expressions. Arrays and objects ar
 
 ### Post fields
 
-Only these core fields can be written: **Title** (plain text), **Content** and **Excerpt** (rich text filtered with `wp_kses_post`, so allowed formatting stays and scripts are removed), **Slug**, **Publish date**, **Status**, and **Author** (user ID, login, or email of a user who can edit the post type). IDs, post type, parent, GUID, and other internal properties are never writable.
+Only these core fields can be written: **Featured image**, **Title** (plain text), **Content** and **Excerpt** (rich text filtered with `wp_kses_post`, so allowed formatting stays and scripts are removed), **Slug**, **Publish date**, **Status**, and **Author** (user ID, login, or email of a user who can edit the post type). IDs, post type, parent, GUID, and other internal properties are never writable.
+
+**Featured image** accepts either the ID of an existing local image attachment or, with *Download image URL to Media Library* enabled, a remote image URL. *Clear the field* removes the featured image (the attachment itself stays in the Media Library). The `_thumbnail_id` meta key stays blocked; use this field instead.
 
 A record's own status field is **never** used as the post status automatically. Mapping a source value to Status requires a **Value map** whose targets are allowed statuses (`draft`, `pending`, `private`, `publish`), with unlisted values either rejected or replaced by a valid fallback. The preset's *Status for new posts* applies only when a post is created.
 
@@ -160,11 +167,44 @@ Values are written with `update_field()` **using field keys**, so ACF records th
 | color_picker, link | Hex colors (rgba when opacity is enabled); link from a URL or a `{url, title, target}` object. |
 | group | Nested mappings resolve relative to the group's source object (`$` = the current record). Unmapped sub fields are left unchanged. |
 | repeater (ACF PRO) | One row per item of the source list; nested mappings resolve relative to each item, so values from the same item always land in the same row. The row list is rebuilt on every write, removing rows that no longer exist; an empty source list empties the repeater. |
-| image, file, gallery, relationship, post object, page link, taxonomy, user, flexible content, clone | Not supported — shown disabled with the reason. Map media URLs to a URL or text field instead. |
+| image | Stores an attachment ID: either a local image attachment ID from the source, or a remote image URL downloaded with *Download image URL to Media Library*. Works at the top level and inside groups and repeaters. |
+| url, text, textarea (with image download) | With *Download image URL to Media Library*, stores the **local** Media Library URL of the downloaded image instead of the remote one. |
+| file, gallery, relationship, post object, page link, taxonomy, user, flexible content, clone | Not supported — shown disabled with the reason. Use an image field for individual images. |
 
 Sub fields are only mappable inside their group or repeater; they are never flattened into top-level meta. Groups and repeaters can nest up to three levels deep.
 
 If ACF is deactivated, or a field or field type a preset needs disappears (for example the repeater type without ACF PRO), runs of **that preset** fail with an explanation. Other presets keep working, and presets that only map core fields and meta never need ACF.
+
+## Importing images into the Media Library
+
+Any mapping whose destination is the **Featured image**, a **custom meta** key, or an **ACF image, URL, text, or textarea** field (top level or inside a group or repeater) has a **Download image URL to Media Library** checkbox. When it is ticked, the mapped value must be an absolute `http(s)` image URL. During a run, the image is downloaded, saved to the Media Library, attached to the destination post, and the field receives a local value:
+
+| Destination | Value written |
+|---|---|
+| Featured image | The attachment ID (set as the post thumbnail) |
+| ACF image field | The attachment ID |
+| ACF URL, text, or textarea field | The local Media Library URL |
+| Custom meta | Your choice under *Store downloaded image as*: **Attachment ID** or **Local media URL** |
+
+Without the checkbox, the Featured image and ACF image fields accept only the ID of an existing local image attachment; anything else fails the record with an explanation.
+
+**Reuse instead of duplicates.** Each downloaded attachment stores a SHA-256 hash of its complete source URL in the protected `_ppapi_image_source_hash` meta (the URL itself is not stored). The next time any record or preset maps the same URL, the existing attachment is reused as long as its file still exists, so re-runs do not fill the Media Library with copies. Query strings count as part of the URL, so signed or transformed image URLs are treated as distinct images.
+
+**When images are fetched.** Images are downloaded only when duplicate and change detection decide a record needs a write — never for unchanged or skipped records, never in **Test request** or **Preview / dry run** (which show the URL with its query string hidden and note that the image would be downloaded or reused), and never while importing a preset file. Change detection uses the source URL, not the local attachment ID, so the same URL never triggers an update by itself. All image fields of a record are resolved before any of them is written, so a failed download leaves the post's existing images in place. Missing/null rules apply as usual.
+
+**Checks and limits.**
+
+- Public `http(s)` addresses only, fetched with `wp_safe_remote_get()` and TLS verification; URLs containing credentials are rejected. At most three redirects, each re-validated.
+- The preset's API credentials, headers, and cookies are **never** sent with image requests.
+- At most 10 MB (or the site's upload limit, if lower) and 40 megapixels.
+- The file must actually be a JPEG, PNG, GIF, WebP, or AVIF image allowed by WordPress — the detected type is used, not the URL's extension, so extensionless URLs work. Files are named `import-<hash>.<ext>`.
+- Each request times out after at most 10 seconds, and all images in one record share a 12-second budget; when it runs out, the record fails and images already saved are reused on the next run.
+- A per-URL lock prevents two runs from downloading the same image at once; the losing record fails and is retried on the next run.
+- Temporary files are always removed. Error messages never echo the image URL, so signed URLs do not leak into history.
+
+**Permissions.** A preset that downloads images also requires the `upload_files` capability — for the administrator saving or running it, and for the preset's default author when it runs on a schedule.
+
+Replaced or no-longer-used images are **never deleted** from the Media Library; clean them up manually if needed.
 
 ## Example: the sample events payload
 
@@ -270,7 +310,35 @@ An empty page ends the run (as *stopped early* if the API claimed more records).
 
 **Errors and retries.** Network errors, timeouts, and HTTP 408, 425, 429, and 5xx responses are retried up to the preset's retry count, waiting 10 s, 20 s, 40 s… (at most 5 minutes) or the server's `Retry-After` (at most an hour). Waits are saved as run state, never slept. Other HTTP errors, malformed JSON, empty bodies, responses at the size limit (rejected rather than parsed as if complete), a failed success flag, and unexpected response shapes fail the run with an explanation. Record-level problems fail only that record.
 
-**Run results.** Each run ends as *Completed*, *Completed with errors* (some records failed), *Stopped early*, *Failed*, or *Cancelled*, with counts of created, updated, unchanged, skipped, and failed records and up to 50 failed records listed. The last 25 runs per preset are kept (**History**).
+**Run results.** Each run ends as *Completed*, *Completed with errors* (some records failed), *Stopped early*, *Failed*, or *Cancelled*, with counts of created, updated, unchanged, skipped, and failed records and up to 50 failed records listed. The last 25 runs per preset are kept (see [Run history](#run-history)).
+
+## Run history
+
+Each preset keeps a summary of its last 25 runs, shown on its **History** screen (row action, or *Run history* in the editor header) and as the five most recent in the editor's **Recent runs** table. Both tables let you delete retained entries:
+
+- **Delete** on a row removes that run.
+- Tick runs (or use the header checkbox to select every *displayed* row) and click **Delete selected**.
+- **Clear all history for this preset** removes every retained run, including runs not shown in the table.
+
+Each deletion asks for confirmation and updates the table in place. Deleting history removes **only the summaries**: imported posts, downloaded media, the activity log, and any run that is still active are kept. History is updated with a compare-and-swap write, so a run that finishes while you clear history is not lost, and a run's summary is never recorded twice. If another request changes history at the same moment and the update cannot be completed, you are asked to try again.
+
+## Exporting and importing presets
+
+Presets can be moved between WordPress sites as portable JSON files.
+
+**Export.** Choose **Export JSON** from the preset list's row actions or the editor header. The export screen downloads `post-press-api-<preset-name>.json` containing the **saved** preset (save pending edits first): name, request settings, response selection, destination, mappings (including image download options), duplicate rules, pagination, schedule, and batch size. Optionally tick **Include saved sample JSON**.
+
+The file never contains stored credentials (bearer tokens or API keys), the preset ID, its enabled state, run state, history, posts, or media files. The default author is stored as a user login rather than a numeric ID, and every ACF mapping carries a description of its field (name, type, and parent group/repeater path) so the receiving site can match its own field keys. **Values typed directly into URLs, headers, request bodies, mappings, or the sample are included** — review the file before sharing it if they contain anything sensitive.
+
+**Import.** Click **Import preset JSON** above the preset list and upload the file (at most 2 MB). The file is validated strictly: it must be a `post-press-api-preset` file in a supported format version, and any setting that is unknown, of the wrong type, out of range, or would be truncated or changed on import is rejected with its location rather than silently altered. The review screen then lets you choose:
+
+- the **local destination post type** (preselected when the source type exists here);
+- the **local author** (matched by the exported login; otherwise your account is selected with a warning);
+- a **local ACF field** for each ACF mapping, including sub fields and an ACF duplicate-matching field. Fields are matched automatically by key, or by a unique field with the same name, type, and parent path. Fields with no unique compatible match must be chosen by hand. After changing the post type or a parent group/repeater, click **Refresh matches** to see its local sub fields.
+
+Warnings point out values that are specific to the source site, such as author mappings and local attachment IDs used without image download. Expand **Review all imported settings** to inspect the full configuration. **Create disabled preset** saves it once nothing is left to resolve.
+
+The imported preset always gets a **new ID** and starts **disabled**. Credentials must be re-entered, and its schedule only takes effect once you enable it. Importing never fetches data or downloads images. Posts imported by the original preset on another site are not migrated, and because a record's identity includes the preset ID, existing posts on this site are not linked automatically — use *Connect existing posts* if the new preset should take over posts that are already here. The destination post type and ACF field groups must already exist on this site.
 
 ## Scheduling and WP-Cron
 
@@ -291,19 +359,21 @@ define('DISABLE_WP_CRON', true);
 
 ## Security and data handling
 
-- **Capabilities.** Every screen, form action, and REST route requires `manage_options`. Saving or running a preset also requires the destination post type's create/edit capabilities (plus `publish_posts` when the preset can publish, and `edit_others_posts` when new posts belong to someone else). Scheduled runs re-check that the default author can still edit (and if needed publish) the post type.
-- **Nonces.** Form submissions and row actions use per-action nonces; REST routes (`ppapi/v1`) use WordPress REST cookie authentication with explicit permission callbacks.
+- **Capabilities.** Every screen, form action, and REST route requires `manage_options`. Saving or running a preset also requires the destination post type's create/edit capabilities (plus `publish_posts` when the preset can publish, `edit_others_posts` when new posts belong to someone else, and `upload_files` when a mapping downloads images). Scheduled runs re-check that the default author can still edit (and if needed publish, or upload files to) the post type.
+- **Nonces.** Form submissions and row actions use per-action nonces; REST routes (`ppapi/v1`) use WordPress REST cookie authentication with explicit permission callbacks. Preset exports require a POST with a per-preset nonce, imports a nonce on every upload, review, and save step, and history deletion a per-preset history nonce in addition to the REST nonce.
+- **Image downloads** follow the same public-address rules as API requests, never carry the preset's credentials, headers, or cookies, and are checked for size, pixel count, and real image type before WordPress stores them. Attachments store only a hash of the source URL; previews and messages hide image URL query strings. See [Importing images into the Media Library](#importing-images-into-the-media-library).
+- **Preset files.** Exports exclude stored credentials; imported files are size-limited and validated strictly, re-validated on every review step, and always create a new, disabled preset.
 - **Outbound requests** are made server-side with `wp_safe_remote_request()`, which refuses private and local addresses. TLS verification stays on. Redirects are followed by the plugin (at most three); when a credential is configured, a redirect to a different scheme, host, or port is refused, so credentials are never forwarded to another host.
 - **Credentials** (bearer tokens and API keys) are stored server-side in a separate, non-autoloaded option per preset, never in the preset itself. They are never sent to the browser: the editor shows only whether one is saved, a blank field keeps it, and removing it is explicit. A credential remembers the endpoint origin it was entered for; changing the endpoint host requires re-entering it. Credentials require `https://` endpoints (filterable). WordPress has no built-in secret encryption, so credentials are stored as entered — protect database access and backups, and prefer narrowly scoped keys.
 - **Redaction.** Previews, run history, and the activity log never contain credentials — even if an API echoes one back, it is masked. Logs contain identifiers and short messages, not payloads; URLs are logged without query strings.
 - **Output.** Values from APIs are escaped on output; the admin script inserts all such values as text. Post content and excerpts keep formatting allowed by `wp_kses_post`.
-- **Retention.** Run history keeps 25 runs per preset; the activity log keeps 200 entries; previews return at most 20 KB of formatted JSON. Sample JSON pasted into a preset (max 256 KB) is stored with that preset — do not paste credentials or data you do not want stored.
+- **Retention.** Run history keeps 25 runs per preset (individual, selected, or all entries can be deleted at any time); the activity log keeps 200 entries; previews return at most 20 KB of formatted JSON. Sample JSON pasted into a preset (max 256 KB) is stored with that preset — do not paste credentials or data you do not want stored.
 - **Storage.** Presets, credentials, samples, run state, history, and the log are non-autoloaded options; only the small preset index (`ppapi_presets`, used for cron schedules) is autoloaded.
 
 ## Deactivation and uninstall
 
-- **Deactivation** cancels unfinished runs and removes the plugin's cron events. Presets, credentials, history, and every imported post are kept; reactivating restores schedules.
-- **Uninstall** (deleting the plugin from the Plugins screen) removes all plugin options (`ppapi_*`: presets, credentials, samples, run state, history, locks, log), the update-check cache, and cron events. **Imported posts are never deleted**, and their `_ppapi_*` tracking meta is kept so a reinstall reconnects to them. To remove that tracking meta manually: `DELETE FROM wp_postmeta WHERE meta_key LIKE '\_ppapi\_%';` (adjust the table prefix).
+- **Deactivation** cancels unfinished runs and removes the plugin's cron events. Presets, credentials, history, every imported post, and every downloaded image are kept; reactivating restores schedules.
+- **Uninstall** (deleting the plugin from the Plugins screen) removes all plugin options (`ppapi_*`: presets, credentials, samples, run state, history, locks, log), the update-check cache, and cron events. **Imported posts and downloaded Media Library images are never deleted**, and their `_ppapi_*` tracking meta (including `_ppapi_image_source_hash` on attachments) is kept so a reinstall reconnects to them and reuses the images. To remove that tracking meta manually: `DELETE FROM wp_postmeta WHERE meta_key LIKE '\_ppapi\_%';` (adjust the table prefix). After that, a reinstalled plugin downloads images again instead of reusing them.
 
 ## GitHub updates
 
@@ -331,7 +401,7 @@ Once configured, the updater adds the latest release to WordPress's update check
 | `ppapi_run_finished` | action | `( $preset_id, $summary )` when a run ends. |
 | `ppapi_log` | action | `( $level, $message, $context )` for every (redacted) log entry. |
 
-Cron hooks: `ppapi_scheduled_run` and `ppapi_continue_run` (argument: preset ID). REST namespace: `ppapi/v1`.
+Cron hooks: `ppapi_scheduled_run` and `ppapi_continue_run` (argument: preset ID). REST namespace: `ppapi/v1` (including `POST /presets/{id}/history/delete`, used by the history tables). Admin-post action: `ppapi_export`.
 
 ## Architecture
 
@@ -342,13 +412,15 @@ src/Autoloader.php              PSR-4: PostPressAPI\Foo\Bar → src/Foo/Bar.php
 src/Plugin.php                  Singleton composition root (plugins_loaded, priority 20)
 src/Services.php                Lazily built shared services
 src/Lifecycle.php               Activation / deactivation
-src/Admin/                      Menu, screens, form handling, row actions
-src/REST/RestController.php     ppapi/v1 routes used by the editor
-src/Presets/                    Schema, repository, credential store, form parsing, validation
+src/Admin/                      Menu, screens (including preset export/import review), form handling, row actions
+src/REST/RestController.php     ppapi/v1 routes used by the editor and history tables
+src/Presets/                    Schema, repository, credential store, form parsing, validation, portable transfer
 src/Http/                       Request building, fetching, redirects, decoding
-src/Mapping/                    Path resolver, discovery, transformations, destinations, mapping engine
+src/Mapping/                    Path resolver, discovery, transformations, destinations, mapping engine, image references
+src/Media/ImageImporter.php     Bounded, locked image downloads and Media Library reuse
 src/Integration/ACF/            Field discovery, value normalization, verified writes
 src/Sync/                       Identity, matching, fingerprints, writes, runs, locks, previews
+src/Support/                    Permissions, redaction, clock, atomic (compare-and-swap) option updates
 src/Scheduling/                 WP-Cron schedules and handlers
 src/Logging/Logger.php          Bounded, redacted activity log
 src/Updates/GitHubUpdater.php   GitHub release updates
@@ -385,7 +457,20 @@ This writes `build/post-press-api-<version>.zip` with a single top-level `post-p
 
 - Outbound fetching only; no inbound webhook receiver or two-way sync.
 - Pagination supports offset/limit and page numbers; cursor and Link-header pagination are not supported.
-- Media is not downloaded: image/file/gallery fields and featured images are not supported (map URLs to URL or text fields).
+- Image imports handle one image per field (JPEG, PNG, GIF, WebP, AVIF; up to 10 MB / 40 megapixels). ACF file and gallery fields are not supported, and replaced images are never removed from the Media Library.
 - ACF relationship-type fields, flexible content, and clone fields are not supported.
-- Credentials are stored unencrypted in the database (as with most WordPress plugins).
+- Credentials are stored unencrypted in the database (as with most WordPress plugins), and preset exports never include them.
+- Preset files move configuration only; posts, media, and history are not transferred between sites.
 - On multisite, schedules are per site; activate the plugin per site rather than network-wide.
+
+## Changelog
+
+### 1.0.3
+
+- **Media Library image imports.** Mappings to the new *Featured image* post field, custom meta, and ACF image/URL/text/textarea fields (including group and repeater sub fields) can download image URLs into the Media Library, reusing an existing attachment for the same URL. ACF image fields are now supported.
+- **Run history deletion.** Delete individual runs, selected runs, or all retained history for a preset from the History screen or the editor's Recent runs table. Posts, media, and active runs are kept.
+- **Preset export/import.** Download a preset as portable JSON (without credentials) and import it on another site, with review of the local post type, author, and ACF fields. Imported presets start disabled.
+
+### 1.0.2
+
+- Paths can select the last item of an array with `[-1]` (for example `items[-1]` or `groups[-1].members[-1].email`).

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace PostPressAPI\Admin;
 
+if (!defined('ABSPATH')) exit;
+
 use PostPressAPI\Admin\Views\AboutView;
 use PostPressAPI\Admin\Views\EditorView;
 use PostPressAPI\Admin\Views\HistoryView;
@@ -13,8 +15,6 @@ use PostPressAPI\Presets\PresetRepository;
 use PostPressAPI\Presets\PresetSchema;
 use PostPressAPI\Services;
 use PostPressAPI\Support\Permissions;
-
-if (!defined('ABSPATH')) exit;
 
 /**
  * The "Post Press API" admin menu and its screens.
@@ -49,6 +49,13 @@ final class AdminPage
      * @var array{ok: bool, preset: array<string, mixed>, errors: array<string, list<string>>, warnings: list<string>, sample: string}|null
      */
     private ?array $failed_save = null;
+
+    /** @var array<string,mixed>|null Original upload retained for the review response. */
+    private ?array $import_data = null;
+    /** @var array<string,mixed>|null Local dependency review. */
+    private ?array $import_review = null;
+    /** @var list<string> Import submission errors. */
+    private array $import_errors = [];
 
     /**
      * Ends the request after a redirect. Replaceable so tests can observe redirects.
@@ -142,6 +149,11 @@ final class AdminPage
      */
     public function handle_save(): void
     {
+        $action = is_string($_POST['ppapi_action'] ?? null) ? $_POST['ppapi_action'] : '';
+        if (strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? '')) === 'POST' && in_array($action, ['import_upload', 'import_review', 'import_save'], true)) {
+            $this->handle_import($action);
+            return;
+        }
         if (strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? '')) !== 'POST' || ($_POST['ppapi_action'] ?? '') !== 'save') {
             return;
         }
@@ -185,12 +197,17 @@ final class AdminPage
         $view      = isset($_GET['view']) ? sanitize_key(wp_unslash($_GET['view'])) : '';
         $preset_id = isset($_GET['preset']) ? sanitize_key(wp_unslash($_GET['preset'])) : '';
 
+        if ($view === 'import') {
+            (new \PostPressAPI\Admin\Views\TransferView($this->services))->render($this->import_data, $this->import_review, $this->import_errors);
+            return;
+        }
+
         if ($view === 'new') {
             $this->render_editor(null);
             return;
         }
 
-        if ($view === 'edit' || $view === 'history') {
+        if ($view === 'edit' || $view === 'history' || $view === 'export') {
             $preset = PresetRepository::is_valid_id($preset_id) ? $this->services->presets()->find($preset_id) : null;
             if ($preset === null) {
                 echo '<div class="wrap ppapi-wrap"><h1>' . esc_html__('Post Press API', 'post-press-api') . '</h1>';
@@ -201,6 +218,11 @@ final class AdminPage
 
             if ($view === 'history') {
                 (new HistoryView($this->services))->render($preset);
+                return;
+            }
+
+            if ($view === 'export') {
+                (new \PostPressAPI\Admin\Views\TransferView($this->services))->export_form($preset);
                 return;
             }
 
@@ -274,6 +296,11 @@ final class AdminPage
     public static function script_strings(): array
     {
         return [
+            'downloadImage' => __('Download image URL to Media Library', 'post-press-api'),
+            'mediaOutput' => __('Store downloaded image as', 'post-press-api'),
+            'attachmentId' => __('Attachment ID', 'post-press-api'),
+            'localMediaUrl' => __('Local media URL', 'post-press-api'),
+            'imageHelp' => __('Public image URLs only, up to 10 MB / 40 megapixels. Reuses images by URL. Missing/null rules still apply; a fallback must be an image URL. Previews do not download images.', 'post-press-api'),
             'mapping'            => __('Mapping %d', 'post-press-api'),
             'subMapping'         => __('Sub field %d', 'post-press-api'),
             'source'             => __('Source', 'post-press-api'),
@@ -430,6 +457,49 @@ final class AdminPage
     {
         if (!Permissions::can_manage()) {
             wp_die(esc_html__('You are not allowed to manage Post Press API.', 'post-press-api'), '', ['response' => 403]);
+        }
+    }
+
+    /**
+     * Parses an upload or revalidates a reviewed import before creating a preset.
+     *
+     * @param string $action import_upload, import_review, or import_save.
+     *
+     * @return void
+     */
+    private function handle_import(string $action): void
+    {
+        $this->assert_access();
+        check_admin_referer('ppapi_import_preset', '_ppapi_import_nonce');
+        $input = wp_unslash($_POST);
+        try {
+            if ($action === 'import_upload') {
+                $file = $_FILES['ppapi_import_file'] ?? null;
+                if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK
+                    || !is_string($file['tmp_name'] ?? null) || !is_uploaded_file($file['tmp_name'])) {
+                    throw new \InvalidArgumentException(__('The upload failed. Choose a JSON file within the server upload limit.', 'post-press-api'));
+                }
+                $json = file_get_contents($file['tmp_name'], false, null, 0, \PostPressAPI\Presets\PresetTransfer::MAX_BYTES + 1);
+                if (!is_string($json)) {
+                    throw new \InvalidArgumentException(__('The uploaded file could not be read.', 'post-press-api'));
+                }
+            } else {
+                $json = is_string($input['ppapi_import_json'] ?? null) ? $input['ppapi_import_json'] : '';
+            }
+            $this->import_data = $this->services->transfer()->decode($json);
+            $type = $action === 'import_upload' ? null : (is_string($input['ppapi_import_type'] ?? null) ? $input['ppapi_import_type'] : '');
+            $author = $action === 'import_upload' ? null : (is_scalar($input['ppapi_import_author'] ?? null) ? (int) $input['ppapi_import_author'] : 0);
+            $remaps = is_array($input['ppapi_import_remaps'] ?? null) ? $input['ppapi_import_remaps'] : [];
+            // Blank controls can auto-match after changing the post type or parent.
+            $remaps = array_filter($remaps, static fn ($key): bool => $key !== '');
+            $this->import_review = $this->services->transfer()->review($this->import_data, $type, $author, $remaps);
+            if ($action === 'import_save' && $this->import_review['problems'] === []) {
+                $saved = $this->services->transfer()->save($this->import_data, (string) $type, (int) $author, $remaps);
+                set_transient('ppapi_warnings_' . get_current_user_id(), $this->import_review['warnings'], 60);
+                ($this->terminate)(self::url(['view' => 'edit', 'preset' => $saved['id'], 'ppapi_notice' => 'imported']));
+            }
+        } catch (\InvalidArgumentException $error) {
+            $this->import_errors[] = $error->getMessage();
         }
     }
 }

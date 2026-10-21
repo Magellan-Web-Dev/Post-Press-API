@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace PostPressAPI\Sync;
 
-use PostPressAPI\Presets\PresetRepository;
-
 if (!defined('ABSPATH')) exit;
+
+use PostPressAPI\Presets\PresetRepository;
 
 /**
  * Persists run progress and bounded run history (all non-autoloaded options).
@@ -128,6 +128,7 @@ final class RunRepository
             return [];
         }
 
+        wp_cache_delete(self::HISTORY_PREFIX . $preset_id, 'options');
         $history = get_option(self::HISTORY_PREFIX . $preset_id, []);
 
         return is_array($history) ? array_values(array_filter($history, 'is_array')) : [];
@@ -153,10 +154,55 @@ final class RunRepository
      */
     public function add_history(string $preset_id, array $entry): void
     {
-        $history = $this->history($preset_id);
-        array_unshift($history, $entry);
+        if (!PresetRepository::is_valid_id($preset_id)) {
+            throw new \InvalidArgumentException('Invalid preset ID.');
+        }
+        \PostPressAPI\Support\AtomicOption::update(self::HISTORY_PREFIX . $preset_id, static function (array $history) use ($entry): array {
+            // A retried finish must not duplicate the same run.
+            $history = array_values(array_filter($history, static fn ($run): bool => is_array($run) && ($run['run_id'] ?? '') !== ($entry['run_id'] ?? null)));
+            array_unshift($history, $entry);
+            return array_slice($history, 0, self::HISTORY_LIMIT);
+        });
+    }
 
-        update_option(self::HISTORY_PREFIX . $preset_id, array_slice($history, 0, self::HISTORY_LIMIT), false);
+    /**
+     * Deletes identified completed summaries without touching active run state.
+     *
+     * @param string       $preset_id Preset ID.
+     * @param list<string> $run_ids   Selected completed run IDs.
+     *
+     * @return int Number of summaries removed.
+     *
+     * @throws \InvalidArgumentException When the preset ID is malformed.
+     * @throws \RuntimeException When a concurrent update cannot be resolved.
+     */
+    public function delete_history(string $preset_id, array $run_ids): int
+    {
+        if (!PresetRepository::is_valid_id($preset_id)) {
+            throw new \InvalidArgumentException('Invalid preset ID.');
+        }
+        $deleted = 0;
+        \PostPressAPI\Support\AtomicOption::update(self::HISTORY_PREFIX . $preset_id, static function (array $history) use ($run_ids, &$deleted): array {
+            $kept = array_values(array_filter($history, static fn ($run): bool => !is_array($run) || !in_array($run['run_id'] ?? '', $run_ids, true)));
+            $deleted = count($history) - count($kept);
+            return $kept;
+        });
+        return $deleted;
+    }
+
+    /**
+     * Clears a snapshot of retained summaries, preserving later completions.
+     *
+     * @param string $preset_id Preset ID.
+     *
+     * @return int Number of summaries removed.
+     *
+     * @throws \RuntimeException When history cannot be updated.
+     */
+    public function clear_history(string $preset_id): int
+    {
+        // Snapshot IDs so a concurrent completion is not lost during CAS retries.
+        return $this->delete_history($preset_id, array_column($this->history($preset_id), 'run_id'));
     }
 
     /**

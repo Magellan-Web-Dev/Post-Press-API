@@ -39,6 +39,7 @@ final class ListView
             <h1 class="wp-heading-inline"><?php esc_html_e('Post Press API', 'post-press-api'); ?></h1>
             <a href="<?php echo esc_url(AdminPage::url(['view' => 'new'])); ?>" class="page-title-action"><?php esc_html_e('Add New Preset', 'post-press-api'); ?></a>
             <hr class="wp-header-end">
+            <p><a class="button" href="<?php echo esc_url(AdminPage::url(['view' => 'import'])); ?>"><?php esc_html_e('Import preset JSON', 'post-press-api'); ?></a></p>
 
             <?php Notices::render_from_query(); ?>
 
@@ -107,6 +108,7 @@ final class ListView
                 <strong><a class="row-title" href="<?php echo esc_url($edit_url); ?>"><?php echo esc_html($name); ?></a></strong>
                 <div class="row-actions">
                     <span class="edit"><a href="<?php echo esc_url($edit_url); ?>"><?php esc_html_e('Edit', 'post-press-api'); ?></a> | </span>
+                    <span><a href="<?php echo esc_url(AdminPage::url(['view' => 'export', 'preset' => $id])); ?>"><?php esc_html_e('Export JSON', 'post-press-api'); ?></a> | </span>
                     <span><a href="<?php echo esc_url(AdminActions::url('ppapi_duplicate', $id)); ?>"><?php esc_html_e('Duplicate', 'post-press-api'); ?></a> | </span>
                     <span>
                         <?php if ($preset['enabled']) : ?>

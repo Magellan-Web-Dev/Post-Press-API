@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace PostPressAPI\Mapping;
 
-use PostPressAPI\Integration\ACF\AcfNormalizer;
-
 if (!defined('ABSPATH')) exit;
+
+use PostPressAPI\Integration\ACF\AcfNormalizer;
 
 /**
  * Evaluates mapping rows against one record.
@@ -141,7 +141,7 @@ final class MappingEngine
                 if ($unmatched === 'fallback') {
                     return [
                         'op'     => FieldWrite::SET,
-                        'value'  => $this->normalize($destination, (string) $row['fallback'], $catalog, $site_tz, false),
+                        'value'  => $this->normalize($destination, (string) $row['fallback'], $catalog, $site_tz, false, $row),
                         'source' => $source,
                         'via'    => 'fallback',
                     ];
@@ -162,7 +162,7 @@ final class MappingEngine
 
         return [
             'op'     => FieldWrite::SET,
-            'value'  => $this->normalize($destination, $value, $catalog, $site_tz, $row['transform'] === Transformer::JSON),
+            'value'  => $this->normalize($destination, $value, $catalog, $site_tz, $row['transform'] === Transformer::JSON, $row),
             'source' => $source,
             'via'    => 'source',
         ];
@@ -198,7 +198,7 @@ final class MappingEngine
                 }
                 return [
                     'op'     => FieldWrite::SET,
-                    'value'  => $this->normalize($destination, (string) $row['fallback'], $catalog, $site_tz, false),
+                    'value'  => $this->normalize($destination, (string) $row['fallback'], $catalog, $site_tz, false, $row),
                     'source' => $source,
                     'via'    => 'fallback',
                 ];
@@ -347,8 +347,16 @@ final class MappingEngine
      *
      * @return mixed
      */
-    private function normalize(Destination $destination, mixed $value, DestinationCatalog $catalog, \DateTimeZone $site_tz, bool $is_json): mixed
+    private function normalize(Destination $destination, mixed $value, DestinationCatalog $catalog, \DateTimeZone $site_tz, bool $is_json, array $row = []): mixed
     {
+        if (!empty($row['media']['download'])) {
+            if (!ImageReference::supports($destination) || !is_string($value)) {
+                throw new MappingError(__('Image downloading requires a URL string and a compatible destination.', 'post-press-api'));
+            }
+            $output = $destination->category === Destination::META ? ($row['media']['output'] ?? 'id')
+                : ($destination->category === Destination::CORE || $destination->acf_type() === 'image' ? 'id' : 'url');
+            return new ImageReference(trim($value), $output);
+        }
         switch ($destination->category) {
             case Destination::CORE:
                 return $catalog->core()->normalize($destination->key, $value, $site_tz, $catalog->post_type);
@@ -513,6 +521,14 @@ final class MappingEngine
         $detail['value']    = array_key_exists('value', $outcome) ? ValueInspector::preview($outcome['value'], 300) : '';
         $detail['note']     = $source->is_present() ? '' : (string) $source->note;
         $detail['children'] = $outcome['children'] ?? [];
+
+        if (($outcome['value'] ?? null) instanceof ImageReference) {
+            $detail['raw'] = \PostPressAPI\Support\Redactor::url($outcome['value']->url);
+            if ($detail['source_type'] !== MappingSchema::SOURCE_PATH) {
+                $detail['source'] = __('Image URL (query parameters hidden)', 'post-press-api');
+            }
+            $detail['note'] = __('Would download or reuse a Media Library image during a write. Remote availability is not checked in a preview.', 'post-press-api');
+        }
 
         return $detail;
     }

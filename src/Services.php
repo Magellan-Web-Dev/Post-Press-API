@@ -120,6 +120,16 @@ final class Services
         return $this->get(SecretStore::class, static fn () => new SecretStore());
     }
 
+    /**
+     * Portable preset export/import with local dependency resolution.
+     *
+     * @return \PostPressAPI\Presets\PresetTransfer
+     */
+    public function transfer(): \PostPressAPI\Presets\PresetTransfer
+    {
+        return $this->get(\PostPressAPI\Presets\PresetTransfer::class, fn () => new \PostPressAPI\Presets\PresetTransfer($this));
+    }
+
     public function form_parser(): PresetFormParser
     {
         return $this->get(PresetFormParser::class, static fn () => new PresetFormParser());

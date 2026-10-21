@@ -71,6 +71,9 @@ final class MappedRecord
     {
         $values = [];
         foreach ($this->writes_for(Destination::CORE) as $write) {
+            if ($write->destination->key === CoreFields::IMAGE) {
+                continue;
+            }
             if ($write->op === FieldWrite::SET) {
                 $values[$write->destination->key] = $write->value;
             } else {

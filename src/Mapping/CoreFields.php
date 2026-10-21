@@ -22,6 +22,7 @@ final class CoreFields
     public const DATE    = 'post_date';
     public const STATUS  = 'post_status';
     public const AUTHOR  = 'post_author';
+    public const IMAGE   = 'featured_image';
 
     /** @var list<string> Default statuses an import may set. */
     private const DEFAULT_STATUSES = ['draft', 'pending', 'private', 'publish'];
@@ -34,6 +35,7 @@ final class CoreFields
     public function definitions(): array
     {
         return [
+            self::IMAGE => ['label' => __('Featured image', 'post-press-api'), 'clearable' => true, 'help' => __('A local image attachment ID, or an image URL with Download image URL to Media Library enabled.', 'post-press-api')],
             self::TITLE   => ['label' => __('Title', 'post-press-api'), 'clearable' => true, 'help' => __('Plain text; HTML tags are removed.', 'post-press-api')],
             self::CONTENT => ['label' => __('Content', 'post-press-api'), 'clearable' => true, 'help' => __('Rich text; HTML allowed in posts is kept.', 'post-press-api')],
             self::EXCERPT => ['label' => __('Excerpt', 'post-press-api'), 'clearable' => true, 'help' => __('Rich text; HTML allowed in posts is kept.', 'post-press-api')],
@@ -92,6 +94,8 @@ final class CoreFields
     public function normalize(string $key, mixed $value, \DateTimeZone $site_tz, string $post_type): mixed
     {
         switch ($key) {
+            case self::IMAGE:
+                return ImageReference::attachment_id($value);
             case self::TITLE:
                 return sanitize_text_field(Transformer::stringify($value, $site_tz));
 

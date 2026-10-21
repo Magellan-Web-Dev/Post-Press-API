@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace PostPressAPI\REST;
 
+if (!defined('ABSPATH')) exit;
+
 use PostPressAPI\Http\Url;
 use PostPressAPI\Presets\PresetFormParser;
 use PostPressAPI\Presets\PresetRepository;
@@ -12,8 +14,6 @@ use PostPressAPI\Presets\PresetValidator;
 use PostPressAPI\Services;
 use PostPressAPI\Support\Permissions;
 use PostPressAPI\Sync\ImportRunner;
-
-if (!defined('ABSPATH')) exit;
 
 /**
  * REST routes (namespace ppapi/v1) used by the preset editor.
@@ -51,6 +51,11 @@ final class RestController
     {
         $permission = [$this, 'can_manage'];
         $id_arg     = ['id' => ['type' => 'string', 'pattern' => '^[a-f0-9]{12}$', 'required' => true]];
+
+        register_rest_route(self::NAMESPACE, '/presets/(?P<id>[a-f0-9]{12})/history/delete', [
+            'methods' => 'POST', 'callback' => [$this, 'delete_history'],
+            'permission_callback' => $permission, 'args' => $id_arg,
+        ]);
 
         register_rest_route(self::NAMESPACE, '/destinations', [
             'methods'             => 'GET',
@@ -106,6 +111,42 @@ final class RestController
      *
      * @return bool|\WP_Error
      */
+    public function delete_history(\WP_REST_Request $request): \WP_REST_Response|\WP_Error
+    {
+        if (!Permissions::can_manage()) {
+            return new \WP_Error('ppapi_forbidden', __('You cannot delete this history.', 'post-press-api'), ['status' => 403]);
+        }
+        $id = (string) $request->get_param('id');
+        $nonce = $request->get_param('history_nonce');
+        if (!is_string($nonce) || !wp_verify_nonce($nonce, 'ppapi_history_' . $id)) {
+            return new \WP_Error('ppapi_nonce', __('The history request expired. Reload the page and try again.', 'post-press-api'), ['status' => 403]);
+        }
+        if ($this->services->presets()->find($id) === null) {
+            return $this->not_found();
+        }
+        $ids = $request->get_param('run_ids') ?? [];
+        if (!is_array($ids) || !array_is_list($ids) || count($ids) > \PostPressAPI\Sync\RunRepository::HISTORY_LIMIT) {
+            return new \WP_Error('ppapi_invalid', __('Invalid run selection.', 'post-press-api'), ['status' => 400]);
+        }
+        foreach ($ids as $run_id) {
+            if (!is_string($run_id) || !preg_match('/^[a-f0-9-]{36}$/i', $run_id)) {
+                return new \WP_Error('ppapi_invalid', __('Invalid run ID.', 'post-press-api'), ['status' => 400]);
+            }
+        }
+        try {
+            $deleted = $request->get_param('clear_all') === true
+                ? $this->services->runs()->clear_history($id)
+                : $this->services->runs()->delete_history($id, array_unique($ids));
+        } catch (\RuntimeException $error) {
+            return new \WP_Error('ppapi_history_busy', $error->getMessage(), ['status' => 409]);
+        }
+        $limit = $request->get_param('limit') === 5 ? 5 : \PostPressAPI\Sync\RunRepository::HISTORY_LIMIT;
+        ob_start();
+        \PostPressAPI\Admin\Views\HistoryView::table($this->services->runs()->history($id), $limit, $id);
+        $html = (string) ob_get_clean();
+        return new \WP_REST_Response(['html' => $html, 'deleted' => $deleted, 'message' => sprintf(__('%d run history entries deleted. Posts, media, and active runs were kept.', 'post-press-api'), $deleted)]);
+    }
+
     public function can_manage(): bool|\WP_Error
     {
         if (Permissions::can_manage()) {
@@ -343,7 +384,8 @@ final class RestController
         $problems = Permissions::current_user_problems(
             (string) $preset['destination']['post_type'],
             PresetValidator::may_publish($preset),
-            (int) $preset['destination']['author']
+            (int) $preset['destination']['author'],
+                    \PostPressAPI\Mapping\ImageReference::used($preset['mappings'])
         );
 
         return $problems === [] ? null : new \WP_Error('ppapi_forbidden', implode(' ', $problems), ['status' => 403]);

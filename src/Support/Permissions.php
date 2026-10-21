@@ -38,7 +38,7 @@ final class Permissions
      *
      * @return list<string>
      */
-    public static function current_user_problems(string $post_type, bool $may_publish, int $author_id): array
+    public static function current_user_problems(string $post_type, bool $may_publish, int $author_id, bool $imports_images = false): array
     {
         $object = get_post_type_object($post_type);
         if (!$object) {
@@ -55,6 +55,9 @@ final class Permissions
         ];
         if ($may_publish) {
             $caps[] = (string) $object->cap->publish_posts;
+        }
+        if ($imports_images) {
+            $caps[] = 'upload_files';
         }
         if ($author_id > 0 && $author_id !== get_current_user_id()) {
             $caps[] = (string) $object->cap->edit_others_posts;
@@ -86,7 +89,7 @@ final class Permissions
      *
      * @return list<string>
      */
-    public static function author_problems(string $post_type, bool $may_publish, int $author_id): array
+    public static function author_problems(string $post_type, bool $may_publish, int $author_id, bool $imports_images = false): array
     {
         $object = get_post_type_object($post_type);
         if (!$object) {
@@ -103,6 +106,9 @@ final class Permissions
         }
 
         $caps = [(string) $object->cap->edit_posts];
+        if ($imports_images) {
+            $caps[] = 'upload_files';
+        }
         if ($may_publish) {
             $caps[] = (string) $object->cap->publish_posts;
         }

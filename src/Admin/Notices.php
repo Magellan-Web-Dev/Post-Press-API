@@ -24,6 +24,7 @@ final class Notices
         }
 
         $messages = [
+            'imported'    => ['success', __('Preset imported and disabled. Review its settings, enter any credentials, then enable it when ready.', 'post-press-api')],
             'created'     => ['success', __('Preset created. It starts disabled and manual-only; test it, then enable it.', 'post-press-api')],
             'saved'       => ['success', __('Preset saved.', 'post-press-api')],
             'duplicated'  => ['success', __('Preset duplicated. The copy is disabled until you enable it.', 'post-press-api')],

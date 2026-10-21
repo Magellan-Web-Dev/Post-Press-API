@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace PostPressAPI\Admin;
 
+if (!defined('ABSPATH')) exit;
+
 use PostPressAPI\Http\Url;
 use PostPressAPI\Presets\PresetFormParser;
 use PostPressAPI\Presets\PresetRepository;
@@ -11,8 +13,6 @@ use PostPressAPI\Presets\PresetValidator;
 use PostPressAPI\Services;
 use PostPressAPI\Support\Permissions;
 use PostPressAPI\Sync\ImportRunner;
-
-if (!defined('ABSPATH')) exit;
 
 /**
  * Saves, duplicates, toggles, and deletes presets.
@@ -158,7 +158,8 @@ final class PresetEditor
                 $problems = array_merge($problems, Permissions::current_user_problems(
                     $post_type,
                     PresetValidator::may_publish($preset),
-                    (int) $preset['destination']['author']
+                    (int) $preset['destination']['author'],
+                    \PostPressAPI\Mapping\ImageReference::used($preset['mappings'])
                 ));
             }
 

@@ -30,10 +30,26 @@ final class AdminActions
      */
     private $terminate;
 
-    public function __construct(private readonly Services $services, ?callable $terminate = null)
+    /** @var callable(string, string): void Emits JSON and ends the download request. */
+    private $download;
+
+    /**
+     * @param Services      $services  Shared plugin services.
+     * @param callable|null $terminate Redirect responder, replaceable in tests.
+     * @param callable|null $download  JSON download responder, replaceable in tests.
+     */
+    public function __construct(private readonly Services $services, ?callable $terminate = null, ?callable $download = null)
     {
         $this->terminate = $terminate ?? static function (string $url): void {
             wp_safe_redirect($url);
+            exit;
+        };
+        $this->download = $download ?? static function (string $filename, string $json): void {
+            nocache_headers();
+            header('Content-Type: application/json; charset=utf-8');
+            header('X-Content-Type-Options: nosniff');
+            header('Content-Disposition: attachment; filename="' . $filename . '"');
+            echo $json;
             exit;
         };
     }
@@ -49,6 +65,39 @@ final class AdminActions
         add_action('admin_post_ppapi_toggle', [$this, 'toggle']);
         add_action('admin_post_ppapi_delete', [$this, 'delete']);
         add_action('admin_post_ppapi_clear_log', [$this, 'clear_log']);
+        add_action('admin_post_ppapi_export', [$this, 'export']);
+    }
+
+    /**
+     * Downloads saved configuration without exposing separately stored credentials.
+     *
+     * @return void
+     */
+    public function export(): void
+    {
+        if (!Permissions::can_manage()) {
+            wp_die(esc_html__('You are not allowed to export presets.', 'post-press-api'), '', ['response' => 403]);
+        }
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            wp_die(esc_html__('Use the export form to download a preset.', 'post-press-api'), '', ['response' => 405]);
+        }
+        $id = is_string($_POST['preset'] ?? null) ? wp_unslash($_POST['preset']) : '';
+        if (!PresetRepository::is_valid_id($id)) {
+            wp_die(esc_html__('Invalid preset.', 'post-press-api'), '', ['response' => 400]);
+        }
+        check_admin_referer('ppapi_export_' . $id);
+        try {
+            $data = $this->services->transfer()->export($id, ($_POST['include_sample'] ?? '') === '1');
+            $json = wp_json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            if (!is_string($json) || strlen($json) > \PostPressAPI\Presets\PresetTransfer::MAX_BYTES) {
+                throw new \InvalidArgumentException(__('The preset could not be encoded within the 2 MB transfer limit. Reduce its sample or configuration size.', 'post-press-api'));
+            }
+            $filename = sanitize_title((string) $data['preset']['name']);
+            $filename = preg_replace('/[^a-z0-9_-]/i', '', $filename) ?: 'preset';
+            ($this->download)('post-press-api-' . substr($filename, 0, 80) . '.json', $json . "\n");
+        } catch (\InvalidArgumentException $error) {
+            wp_die(esc_html($error->getMessage()), '', ['response' => 400]);
+        }
     }
 
     /**

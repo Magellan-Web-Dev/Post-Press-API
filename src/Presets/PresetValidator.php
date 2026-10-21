@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace PostPressAPI\Presets;
 
+if (!defined('ABSPATH')) exit;
+
 use PostPressAPI\Http\Url;
 use PostPressAPI\Mapping\CoreFields;
 use PostPressAPI\Mapping\Destination;
@@ -11,8 +13,6 @@ use PostPressAPI\Mapping\DestinationRegistry;
 use PostPressAPI\Mapping\MappingValidator;
 use PostPressAPI\Mapping\PathResolver;
 use PostPressAPI\Support\Permissions;
-
-if (!defined('ABSPATH')) exit;
 
 /**
  * Validates presets.
@@ -414,12 +414,12 @@ final class PresetValidator
 
         $may_publish = self::may_publish($preset);
 
-        foreach (Permissions::author_problems($post_type, $may_publish, (int) $destination['author']) as $problem) {
+        foreach (Permissions::author_problems($post_type, $may_publish, (int) $destination['author'], \PostPressAPI\Mapping\ImageReference::used($preset['mappings'])) as $problem) {
             $add('destination.author', $problem);
         }
 
         if ($check_permissions) {
-            foreach (Permissions::current_user_problems($post_type, $may_publish, (int) $destination['author']) as $problem) {
+            foreach (Permissions::current_user_problems($post_type, $may_publish, (int) $destination['author'], \PostPressAPI\Mapping\ImageReference::used($preset['mappings'])) as $problem) {
                 $add('destination.post_type', $problem);
             }
         }

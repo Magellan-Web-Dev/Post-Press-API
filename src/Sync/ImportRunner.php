@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace PostPressAPI\Sync;
 
+if (!defined('ABSPATH')) exit;
+
 use PostPressAPI\Http\ApiClient;
 use PostPressAPI\Http\Url;
 use PostPressAPI\Logging\Logger;
@@ -19,8 +21,6 @@ use PostPressAPI\Scheduling\ContinuationScheduler;
 use PostPressAPI\Support\Clock;
 use PostPressAPI\Support\Permissions;
 use PostPressAPI\Support\Redactor;
-
-if (!defined('ABSPATH')) exit;
 
 /**
  * Runs imports in bounded, resumable steps. Manual and scheduled runs share
@@ -542,7 +542,7 @@ final class ImportRunner
             }
         }
 
-        $problems = Permissions::author_problems($post_type, PresetValidator::may_publish($preset), (int) $preset['destination']['author']);
+        $problems = Permissions::author_problems($post_type, PresetValidator::may_publish($preset), (int) $preset['destination']['author'], \PostPressAPI\Mapping\ImageReference::used($preset['mappings']));
         if ($problems !== []) {
             return implode(' ', $problems);
         }

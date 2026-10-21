@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace PostPressAPI\Admin\Views;
 
+if (!defined('ABSPATH')) exit;
+
 use PostPressAPI\Admin\AdminPage;
 use PostPressAPI\Admin\Format;
 use PostPressAPI\Admin\Notices;
@@ -16,8 +18,6 @@ use PostPressAPI\Scheduling\Scheduler;
 use PostPressAPI\Services;
 use PostPressAPI\Sync\ImportRunner;
 use PostPressAPI\Sync\PreviewService;
-
-if (!defined('ABSPATH')) exit;
 
 /**
  * The preset editor.
@@ -107,6 +107,7 @@ final class EditorView
             </h1>
             <a class="page-title-action" href="<?php echo esc_url(AdminPage::url()); ?>"><?php esc_html_e('All presets', 'post-press-api'); ?></a>
             <?php if (!$is_new) : ?>
+                <a class="page-title-action" href="<?php echo esc_url(AdminPage::url(['view' => 'export', 'preset' => $id])); ?>"><?php esc_html_e('Export JSON', 'post-press-api'); ?></a>
                 <a class="page-title-action" href="<?php echo esc_url(AdminPage::url(['view' => 'history', 'preset' => $id])); ?>"><?php esc_html_e('Run history', 'post-press-api'); ?></a>
             <?php endif; ?>
             <hr class="wp-header-end">
@@ -696,7 +697,7 @@ final class EditorView
                 <div id="ppapi-run-status" class="ppapi-result ppapi-run-status" role="status" aria-live="polite"></div>
 
                 <h3><?php esc_html_e('Recent runs', 'post-press-api'); ?></h3>
-                <?php HistoryView::table($history, 5); ?>
+                <?php HistoryView::table($history, 5, (string) $preset['id']); ?>
                 <?php if (count($history) > 5) : ?>
                     <p><a href="<?php echo esc_url(AdminPage::url(['view' => 'history', 'preset' => $preset['id']])); ?>"><?php esc_html_e('View all runs', 'post-press-api'); ?></a></p>
                 <?php endif; ?>

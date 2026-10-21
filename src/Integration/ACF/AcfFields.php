@@ -23,7 +23,7 @@ final class AcfFields
     public const SCALAR_TYPES = [
         'text', 'textarea', 'wysiwyg', 'number', 'range', 'email', 'url', 'oembed', 'true_false',
         'select', 'radio', 'button_group', 'checkbox', 'date_picker', 'date_time_picker', 'time_picker',
-        'color_picker', 'link',
+        'color_picker', 'link', 'image',
     ];
 
     /** @var list<string> Field types that need nested mappings. */
@@ -189,7 +189,7 @@ final class AcfFields
         }
 
         return match ($type) {
-            'image', 'file', 'gallery' => __('Media fields are not supported: importing files is out of scope for this version. Map the media URL to a URL or text field instead.', 'post-press-api'),
+            'file', 'gallery' => __('File and gallery fields are not supported. Use an image field for individual image imports.', 'post-press-api'),
             'post_object', 'page_link', 'relationship', 'taxonomy', 'user' => __('Relationship fields need local WordPress IDs, which an external API cannot provide, so they are not supported.', 'post-press-api'),
             'flexible_content', 'clone' => __('Flexible content and clone fields are not supported. Map their data into separate fields instead.', 'post-press-api'),
             default => sprintf(

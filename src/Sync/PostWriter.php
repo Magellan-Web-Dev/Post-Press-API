@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace PostPressAPI\Sync;
 
+if (!defined('ABSPATH')) exit;
+
 use PostPressAPI\Integration\ACF\AcfWriter;
 use PostPressAPI\Mapping\CoreFields;
 use PostPressAPI\Mapping\Destination;
 use PostPressAPI\Mapping\FieldWrite;
 use PostPressAPI\Mapping\MappedRecord;
-
-if (!defined('ABSPATH')) exit;
 
 /**
  * Applies mapped values to posts and maintains tracking metadata.
@@ -41,7 +41,7 @@ final class PostWriter
     public const STATE_PENDING  = 'pending';
     public const STATE_COMPLETE = 'complete';
 
-    public function __construct(private readonly AcfWriter $acf)
+    public function __construct(private readonly AcfWriter $acf, private readonly \PostPressAPI\Media\ImageImporter $images = new \PostPressAPI\Media\ImageImporter())
     {
     }
 
@@ -160,6 +160,26 @@ final class PostWriter
      */
     public function apply_fields(int $post_id, MappedRecord $mapped): void
     {
+        // Resolve every download before replacing any image field or ACF container.
+        $mapped = $this->images->resolve($mapped, $post_id);
+        foreach ($mapped->writes_for(Destination::CORE) as $write) {
+            if ($write->destination->key !== CoreFields::IMAGE) {
+                continue;
+            }
+            $id = $write->op === FieldWrite::CLEAR ? 0 : (int) $write->value;
+            $previous = (int) get_post_thumbnail_id($post_id);
+            if ($id === 0) {
+                delete_post_thumbnail($post_id);
+            } else {
+                set_post_thumbnail($post_id, $id);
+            }
+            if ((int) get_post_thumbnail_id($post_id) !== $id) {
+                if ($previous > 0) {
+                    set_post_thumbnail($post_id, $previous);
+                }
+                throw new WriteError(__('The featured image could not be saved.', 'post-press-api'));
+            }
+        }
         foreach ($mapped->writes_for(Destination::META) as $write) {
             if ($write->op === FieldWrite::CLEAR) {
                 $this->clear_meta($post_id, $write->destination->key);

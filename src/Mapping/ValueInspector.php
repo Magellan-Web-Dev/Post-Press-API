@@ -92,6 +92,7 @@ final class ValueInspector
      */
     public static function preview(mixed $value, int $max_length = 120): string
     {
+        $value = self::preview_value($value);
         if (is_string($value)) {
             $text = $value;
         } else {
@@ -104,6 +105,24 @@ final class ValueInspector
         }
 
         return $text;
+    }
+
+    /**
+     * Converts deferred images into readable descriptions without exposing URL queries.
+     *
+     * @param mixed $value Mapped value, possibly containing nested image references.
+     *
+     * @return mixed JSON-safe preview value.
+     */
+    private static function preview_value(mixed $value): mixed
+    {
+        if ($value instanceof ImageReference) {
+            return ['image_url' => \PostPressAPI\Support\Redactor::url($value->url), 'output' => $value->output === 'id' ? __('Local attachment ID (resolved during run)', 'post-press-api') : __('Local media URL (resolved during run)', 'post-press-api')];
+        }
+        if (is_array($value)) {
+            return array_map([self::class, 'preview_value'], $value);
+        }
+        return $value;
     }
 
     /**

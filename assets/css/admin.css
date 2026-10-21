@@ -284,6 +284,17 @@
 	font-weight: 600;
 }
 
+/* Response Test */
+
+.ppapi-wrap .ppapi-card details {
+	margin-top: 1.5rem;
+}
+
+.ppapi-wrap .ppapi-card details summary {
+	cursor: pointer;
+	width: fit-content;
+}
+
 /* Status badges */
 
 .ppapi-wrap .ppapi-badge,

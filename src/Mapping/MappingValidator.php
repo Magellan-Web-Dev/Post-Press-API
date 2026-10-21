@@ -96,6 +96,17 @@ final class MappingValidator
         }
         $seen[$id] = true;
 
+        if (!empty($row['media']['download'])) {
+            if (!ImageReference::supports($destination)) {
+                $add(__('Image downloading is only supported for featured images, custom meta, and ACF image/URL/text fields.', 'post-press-api'));
+            } elseif ($destination->category !== Destination::META) {
+                $expected = $destination->category === Destination::CORE || $destination->acf_type() === 'image' ? 'id' : 'url';
+                if (($row['media']['output'] ?? 'id') !== $expected) {
+                    $add(sprintf(__('This image destination requires output: %s.', 'post-press-api'), $expected));
+                }
+            }
+        }
+
         $in_repeater = $parent !== null && $parent->acf_type() === 'repeater';
 
         foreach (['on_missing' => __('When missing', 'post-press-api'), 'on_null' => __('When null', 'post-press-api')] as $key => $behavior_label) {

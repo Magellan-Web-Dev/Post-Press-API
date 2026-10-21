@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace PostPressAPI\Admin\Views;
 
+if (!defined('ABSPATH')) exit;
+
 use PostPressAPI\Admin\AdminPage;
 use PostPressAPI\Admin\Format;
 use PostPressAPI\Services;
 use PostPressAPI\Sync\RunRepository;
-
-if (!defined('ABSPATH')) exit;
 
 /**
  * Run history for one preset (the last 25 runs).
@@ -55,7 +55,7 @@ final class HistoryView
                 ?>
             </p>
 
-            <?php self::table($history); ?>
+            <?php self::table($history, null, (string) $preset['id']); ?>
         </div>
         <?php
     }
@@ -68,21 +68,32 @@ final class HistoryView
      *
      * @return void
      */
-    public static function table(array $history, ?int $limit = null): void
+    public static function table(array $history, ?int $limit = null, string $preset_id = ''): void
     {
+        $total = count($history);
         if ($limit !== null) {
             $history = array_slice($history, 0, $limit);
         }
-
-        if ($history === []) {
-            echo '<p>' . esc_html__('No runs yet.', 'post-press-api') . '</p>';
-            return;
-        }
         ?>
+        <div class="ppapi-history" data-ppapi-history data-preset="<?php echo esc_attr($preset_id); ?>" data-limit="<?php echo (int) ($limit ?? RunRepository::HISTORY_LIMIT); ?>"
+            data-nonce="<?php echo esc_attr(wp_create_nonce('ppapi_history_' . $preset_id)); ?>" data-rest-nonce="<?php echo esc_attr(wp_create_nonce('wp_rest')); ?>"
+            data-confirm="<?php esc_attr_e('Delete this run history? Imported posts, media, and active runs will be kept.', 'post-press-api'); ?>">
+        <p class="ppapi-history-feedback" role="status" aria-live="polite"></p>
+        <?php if ($history === []) : ?>
+            <p><?php esc_html_e('No runs yet.', 'post-press-api'); ?></p>
+        <?php else : ?>
+        <?php if ($preset_id !== '') : ?>
+            <p class="ppapi-history-controls">
+                <button type="button" class="button" data-history-action="selected" disabled><?php esc_html_e('Delete selected', 'post-press-api'); ?></button>
+                <button type="button" class="button" data-history-action="all"><?php echo esc_html(sprintf(__('Clear all history for this preset (%d runs)', 'post-press-api'), $total)); ?></button>
+                <span class="description"><?php esc_html_e('Select all selects displayed rows. Clear all includes retained runs not shown here.', 'post-press-api'); ?></span>
+            </p>
+        <?php endif; ?>
         <table class="widefat striped ppapi-history-table">
             <caption class="screen-reader-text"><?php esc_html_e('Run history', 'post-press-api'); ?></caption>
             <thead>
                 <tr>
+                    <?php if ($preset_id !== '') : ?><th scope="col"><input type="checkbox" data-history-select-all aria-label="<?php esc_attr_e('Select all displayed runs', 'post-press-api'); ?>"></th><?php endif; ?>
                     <th scope="col"><?php esc_html_e('Started', 'post-press-api'); ?></th>
                     <th scope="col"><?php esc_html_e('Trigger', 'post-press-api'); ?></th>
                     <th scope="col"><?php esc_html_e('Result', 'post-press-api'); ?></th>
@@ -93,6 +104,7 @@ final class HistoryView
                     <th scope="col" class="ppapi-num"><?php esc_html_e('Failed', 'post-press-api'); ?></th>
                     <th scope="col" class="ppapi-num"><?php esc_html_e('Pages', 'post-press-api'); ?></th>
                     <th scope="col"><?php esc_html_e('Details', 'post-press-api'); ?></th>
+                    <?php if ($preset_id !== '') : ?><th scope="col"><?php esc_html_e('Actions', 'post-press-api'); ?></th><?php endif; ?>
                 </tr>
             </thead>
             <tbody>
@@ -102,6 +114,7 @@ final class HistoryView
                     $issues = (array) ($run['issues'] ?? []);
                     ?>
                     <tr>
+                        <?php if ($preset_id !== '') : ?><td><input type="checkbox" data-history-id="<?php echo esc_attr((string) ($run['run_id'] ?? '')); ?>" aria-label="<?php echo esc_attr(sprintf(__('Select run started %s', 'post-press-api'), Format::datetime((int) ($run['started_at'] ?? 0)))); ?>"></td><?php endif; ?>
                         <td><?php echo esc_html(Format::datetime((int) ($run['started_at'] ?? 0))); ?></td>
                         <td><?php echo esc_html(($run['trigger'] ?? '') === 'schedule' ? __('Schedule', 'post-press-api') : __('Manual', 'post-press-api')); ?><?php echo !empty($run['force']) ? ' ' . esc_html__('(re-apply)', 'post-press-api') : ''; ?></td>
                         <td><span class="ppapi-status <?php echo esc_attr(Format::status_class((string) ($run['status'] ?? ''))); ?>"><?php echo esc_html(Format::status((string) ($run['status'] ?? ''))); ?></span></td>
@@ -160,10 +173,13 @@ final class HistoryView
                                 </details>
                             <?php endif; ?>
                         </td>
+                        <?php if ($preset_id !== '') : ?><td><button type="button" class="button-link ppapi-link-delete" data-history-action="one" data-run-id="<?php echo esc_attr((string) ($run['run_id'] ?? '')); ?>"><?php esc_html_e('Delete', 'post-press-api'); ?></button></td><?php endif; ?>
                     </tr>
                 <?php endforeach; ?>
             </tbody>
         </table>
+        <?php endif; ?>
+        </div>
         <?php
     }
 }

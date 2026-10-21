@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace PostPressAPI\Integration\ACF;
 
+if (!defined('ABSPATH')) exit;
+
 use PostPressAPI\Mapping\DateParser;
 use PostPressAPI\Mapping\DateValue;
 use PostPressAPI\Mapping\MappingError;
 use PostPressAPI\Mapping\Transformer;
 use PostPressAPI\Mapping\ValueInspector;
-
-if (!defined('ABSPATH')) exit;
 
 /**
  * Converts mapped values into the storage format of single-value ACF fields.
@@ -41,6 +41,8 @@ final class AcfNormalizer
         $type = (string) ($field['type'] ?? '');
 
         switch ($type) {
+            case 'image':
+                return \PostPressAPI\Mapping\ImageReference::attachment_id($value);
             case 'text':
                 return sanitize_text_field(Transformer::stringify($value, $site_tz));
 
