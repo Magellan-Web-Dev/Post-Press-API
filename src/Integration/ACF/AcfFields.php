@@ -19,11 +19,11 @@ if (!defined('ABSPATH')) exit;
  */
 final class AcfFields
 {
-    /** @var list<string> Field types written as single values. */
+    /** @var list<string> Field types written without sub mappings, including list_items arrays. */
     public const SCALAR_TYPES = [
         'text', 'textarea', 'wysiwyg', 'number', 'range', 'email', 'url', 'oembed', 'true_false',
         'select', 'radio', 'button_group', 'checkbox', 'date_picker', 'date_time_picker', 'time_picker',
-        'color_picker', 'link', 'image',
+        'color_picker', 'link', 'image', 'list_items',
     ];
 
     /** @var list<string> Field types that need nested mappings. */

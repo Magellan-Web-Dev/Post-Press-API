@@ -12,7 +12,8 @@ use PostPressAPI\Integration\ACF\AcfNormalizer;
  * Evaluates mapping rows against one record.
  *
  * Per row: read the source (path, constant, or template) → decide what to do
- * when it is missing or null → transform → normalize for the destination.
+ * when it is missing or null → check an optional condition on present values
+ * → transform → normalize for the destination.
  * Nothing is written here; the result is a list of {@see FieldWrite}s that
  * the sync layer applies (or a dry run displays).
  *
@@ -98,6 +99,8 @@ final class MappingEngine
 
     /**
      * Evaluates a row in a context (record, group object, or repeater item).
+     * Enabled conditions run on present values before container expansion,
+     * transformation, or image downloads. Missing/null policies remain separate.
      *
      * @param mixed                $context      Context value paths resolve against.
      * @param array<string, mixed> $row          Row.
@@ -106,22 +109,41 @@ final class MappingEngine
      * @param \DateTimeZone        $site_tz      Site time zone.
      * @param bool                 $in_repeater  Whether the row is a repeater sub field.
      * @param bool                 $with_details Whether to collect nested details.
+     * @param bool                 $condition_in_repeater Whether an ancestor is a repeater; does not change missing/null policies.
      *
-     * @return array{op: string, value?: mixed, source: PathResult, via?: string, children?: list<array<string, mixed>>}
+     * @return array{op: string, value?: mixed, source: PathResult, via?: string, note?: string, children?: list<array<string, mixed>>}
      */
-    private function evaluate_value(mixed $context, array $row, Destination $destination, DestinationCatalog $catalog, \DateTimeZone $site_tz, bool $in_repeater, bool $with_details): array
+    private function evaluate_value(mixed $context, array $row, Destination $destination, DestinationCatalog $catalog, \DateTimeZone $site_tz, bool $in_repeater, bool $with_details, bool $condition_in_repeater = false): array
     {
         $source = $this->read_source($context, $row);
+        $condition = $row['condition'] ?? MappingCondition::DEFAULTS;
+        $condition_in_repeater = $condition_in_repeater || $in_repeater;
+        $condition_note = '';
+        if (!empty($condition['enabled'])) {
+            $errors = MappingCondition::errors($condition, $destination, $condition_in_repeater);
+            if ($errors !== []) {
+                throw new MappingError(implode(' ', $errors));
+            }
+            if ($source->is_present()) {
+                $matched = MappingCondition::matches($condition, $source->value);
+                $condition_note = MappingCondition::note($condition, $matched);
+                if ($matched) {
+                    return ['op' => $condition['action'], 'source' => $source, 'via' => 'condition', 'note' => $condition_note];
+                }
+            }
+        }
 
         if ($destination->is_container()) {
-            return $this->evaluate_container($source, $row, $destination, $catalog, $site_tz, $in_repeater, $with_details);
+            $outcome = $this->evaluate_container($source, $row, $destination, $catalog, $site_tz, $in_repeater, $with_details, $condition_in_repeater);
+        } elseif ($source->is_present()) {
+            $outcome = $this->convert($source, $row, $destination, $catalog, $site_tz);
+        } else {
+            $outcome = $this->apply_behavior($source, $row, $destination, $catalog, $site_tz, $in_repeater);
         }
-
-        if ($source->is_present()) {
-            return $this->convert($source, $row, $destination, $catalog, $site_tz);
+        if ($condition_note !== '') {
+            $outcome['note'] = $condition_note;
         }
-
-        return $this->apply_behavior($source, $row, $destination, $catalog, $site_tz, $in_repeater);
+        return $outcome;
     }
 
     /**
@@ -223,10 +245,20 @@ final class MappingEngine
 
     /**
      * Builds the value for an ACF group or repeater.
+     * A condition may skip the enclosing repeater row through nested groups.
+     *
+     * @param PathResult $source Resolved container source.
+     * @param array<string, mixed> $row Mapping settings.
+     * @param Destination $destination Group or repeater destination.
+     * @param DestinationCatalog $catalog Available fields.
+     * @param \DateTimeZone $site_tz Site time zone.
+     * @param bool $in_repeater Whether the immediate parent is a repeater.
+     * @param bool $with_details Whether to collect nested previews.
+     * @param bool $condition_in_repeater Whether an ancestor is a repeater.
      *
      * @return array{op: string, value?: mixed, source: PathResult, children?: list<array<string, mixed>>}
      */
-    private function evaluate_container(PathResult $source, array $row, Destination $destination, DestinationCatalog $catalog, \DateTimeZone $site_tz, bool $in_repeater, bool $with_details): array
+    private function evaluate_container(PathResult $source, array $row, Destination $destination, DestinationCatalog $catalog, \DateTimeZone $site_tz, bool $in_repeater, bool $with_details, bool $condition_in_repeater = false): array
     {
         if (!$source->is_present()) {
             return $this->apply_behavior($source, $row, $destination, $catalog, $site_tz, $in_repeater);
@@ -245,7 +277,10 @@ final class MappingEngine
                 ));
             }
 
-            $built = $this->build_children($value, $children, $destination, $catalog, $site_tz, false, $with_details, $details);
+            $built = $this->build_children($value, $children, $destination, $catalog, $site_tz, false, $with_details, $details, $condition_in_repeater);
+            if ($built === null) {
+                return ['op' => MappingSchema::SKIP_ROW, 'source' => $source, 'children' => $details];
+            }
             if ($built === []) {
                 return ['op' => MappingSchema::PRESERVE, 'source' => $source, 'children' => $details];
             }
@@ -263,7 +298,7 @@ final class MappingEngine
 
         $rows = [];
         foreach ($value as $index => $item) {
-            $built = $this->build_children($item, $children, $destination, $catalog, $site_tz, true, $with_details && $index === 0, $details);
+            $built = $this->build_children($item, $children, $destination, $catalog, $site_tz, true, $with_details && $index === 0, $details, true);
             if ($built !== null) {
                 $rows[] = $built;
             }
@@ -293,10 +328,11 @@ final class MappingEngine
      * @param bool                             $in_repeater Whether building a repeater row.
      * @param bool                             $collect     Whether to collect preview details.
      * @param list<array<string, mixed>>       $details     Detail accumulator.
+     * @param bool                            $condition_in_repeater Whether an ancestor is a repeater for condition actions.
      *
      * @return array<string, mixed>|null Null when a repeater row is skipped.
      */
-    private function build_children(mixed $context, array $children, Destination $parent, DestinationCatalog $catalog, \DateTimeZone $site_tz, bool $in_repeater, bool $collect, array &$details): ?array
+    private function build_children(mixed $context, array $children, Destination $parent, DestinationCatalog $catalog, \DateTimeZone $site_tz, bool $in_repeater, bool $collect, array &$details, bool $condition_in_repeater = false): ?array
     {
         $values = [];
 
@@ -304,7 +340,7 @@ final class MappingEngine
             $child_destination = $catalog->resolve_child($parent, (string) $child['target']);
 
             try {
-                $outcome = $this->evaluate_value($context, $child, $child_destination, $catalog, $site_tz, $in_repeater, false);
+                $outcome = $this->evaluate_value($context, $child, $child_destination, $catalog, $site_tz, $in_repeater, $collect, $condition_in_repeater);
             } catch (MappingError $e) {
                 throw new MappingError(sprintf('%s › %s', $child_destination->label, $e->getMessage()));
             }
@@ -502,10 +538,10 @@ final class MappingEngine
     }
 
     /**
-     * Completes a preview detail entry from an outcome.
+     * Completes a preview detail entry, including any condition explanation.
      *
      * @param array<string, mixed>                                        $detail  Detail.
-     * @param array{op: string, value?: mixed, source: PathResult, via?: string, children?: list<array<string, mixed>>} $outcome Outcome.
+     * @param array{op: string, value?: mixed, source: PathResult, via?: string, note?: string, children?: list<array<string, mixed>>} $outcome Outcome.
      *
      * @return array<string, mixed>
      */
@@ -519,7 +555,7 @@ final class MappingEngine
         $detail['result']   = $outcome['op'];
         $detail['via']      = $outcome['via'] ?? '';
         $detail['value']    = array_key_exists('value', $outcome) ? ValueInspector::preview($outcome['value'], 300) : '';
-        $detail['note']     = $source->is_present() ? '' : (string) $source->note;
+        $detail['note']     = $outcome['note'] ?? ($source->is_present() ? '' : (string) $source->note);
         $detail['children'] = $outcome['children'] ?? [];
 
         if (($outcome['value'] ?? null) instanceof ImageReference) {
@@ -527,7 +563,7 @@ final class MappingEngine
             if ($detail['source_type'] !== MappingSchema::SOURCE_PATH) {
                 $detail['source'] = __('Image URL (query parameters hidden)', 'post-press-api');
             }
-            $detail['note'] = __('Would download or reuse a Media Library image during a write. Remote availability is not checked in a preview.', 'post-press-api');
+            $detail['note'] = trim($detail['note'] . ' ' . __('Would download or reuse a Media Library image during a write. Remote availability is not checked in a preview.', 'post-press-api'));
         }
 
         return $detail;

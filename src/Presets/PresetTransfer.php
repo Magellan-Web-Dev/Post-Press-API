@@ -336,7 +336,7 @@ final class PresetTransfer
     }
 
     /**
-     * Checks container types before passing untrusted data to schema normalization.
+     * Checks container types, including optional conditions, before normalization.
      *
      * @param array<string, mixed> $preset Portable settings.
      *
@@ -364,6 +364,9 @@ final class PresetTransfer
                 if (!is_array($row) || !is_array($row['options'] ?? null) || !is_array($row['media'] ?? null)) {
                     throw new \InvalidArgumentException(__('The export contains an invalid mapping row.', 'post-press-api'));
                 }
+                if (array_key_exists('condition', $row) && !is_array($row['condition'])) {
+                    throw new \InvalidArgumentException(__('The export contains an invalid condition object.', 'post-press-api'));
+                }
                 $walk($row['children'] ?? null, $depth + 1);
             }
         };
@@ -372,7 +375,7 @@ final class PresetTransfer
 
     /**
      * Rejects any normalization that would silently lose or reinterpret settings.
-     * Older exports may omit the opt-in Join date flag; its default is false.
+     * Older exports may omit the Join date flag or condition object; both default off.
      *
      * @param mixed  $input      Submitted JSON value.
      * @param mixed  $normalized Corresponding normalized value.
@@ -385,6 +388,10 @@ final class PresetTransfer
     private function assert_same(mixed $input, mixed $normalized, string $path): void
     {
         if (is_array($input) && is_array($normalized)) {
+            if (preg_match('/^preset\.mappings\.\d+(?:\.children\.\d+)*$/', $path)
+                && !array_key_exists('condition', $input)) {
+                $input['condition'] = \PostPressAPI\Mapping\MappingCondition::DEFAULTS;
+            }
             if (preg_match('/^preset\.mappings\.\d+(?:\.children\.\d+)*\.options$/', $path)
                 && !array_key_exists('join_datetime', $input) && ($normalized['join_datetime'] ?? null) === false) {
                 $input['join_datetime'] = false;

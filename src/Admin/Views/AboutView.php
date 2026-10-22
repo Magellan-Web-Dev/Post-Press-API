@@ -26,7 +26,7 @@ final class AboutView
     }
 
     /**
-     * Renders the screen.
+     * Renders the screen, including release highlights and the live version.
      *
      * @return void
      */
@@ -52,6 +52,7 @@ final class AboutView
             </p>
 
             <nav class="ppapi-section-nav" aria-label="<?php esc_attr_e('About sections', 'post-press-api'); ?>">
+                <a href="#ppapi-about-release"><?php esc_html_e('New in 1.0.5', 'post-press-api'); ?></a>
                 <a href="#ppapi-about-status"><?php esc_html_e('Site status', 'post-press-api'); ?></a>
                 <a href="#ppapi-about-setup"><?php esc_html_e('Getting started', 'post-press-api'); ?></a>
                 <a href="#ppapi-about-features"><?php esc_html_e('Features', 'post-press-api'); ?></a>
@@ -68,6 +69,7 @@ final class AboutView
             </nav>
 
             <?php
+            $this->release_notes();
             $this->status();
             $this->setup();
             $this->features();
@@ -83,6 +85,28 @@ final class AboutView
             $this->limits();
             ?>
         </div>
+        <?php
+    }
+
+    /**
+     * Summarizes version 1.0.5 and links to its mapping and ACF documentation.
+     *
+     * @return void
+     */
+    private function release_notes(): void
+    {
+        ?>
+        <section class="ppapi-card" id="ppapi-about-release" aria-labelledby="ppapi-about-release-heading">
+            <h2 id="ppapi-about-release-heading"><?php esc_html_e('New in version 1.0.5', 'post-press-api'); ?></h2>
+            <ul class="ppapi-list">
+                <li><strong><?php esc_html_e('Conditional field mappings:', 'post-press-api'); ?></strong> <?php esc_html_e('Compare a source array\'s item count or match literal text before transformation. A matching rule can keep or clear a field, or skip a repeater row. Conditions are disabled by default, so existing mappings keep their behavior.', 'post-press-api'); ?></li>
+                <li><strong><?php esc_html_e('Custom ACF List Items:', 'post-press-api'); ?></strong> <?php esc_html_e('Map arrays of strings directly to a registered list_items field with No transformation, including inside groups and repeaters. Items are sanitized as plain text while preserving their order and duplicates.', 'post-press-api'); ?></li>
+            </ul>
+            <p>
+                <a href="#ppapi-about-mappings"><?php esc_html_e('Read about conditional mappings', 'post-press-api'); ?></a>
+                &middot; <a href="#ppapi-about-acf"><?php esc_html_e('Read about List Items support', 'post-press-api'); ?></a>
+            </p>
+        </section>
         <?php
     }
 
@@ -289,6 +313,11 @@ final class AboutView
         <?php
     }
 
+    /**
+     * Explains mapping sources, transformations, conditional writes, and null policies.
+     *
+     * @return void
+     */
     private function mappings(): void
     {
         $transform_notes = [
@@ -328,6 +357,13 @@ final class AboutView
             </ul>
             <p><?php esc_html_e('A record\'s own status (for example "received") is never used as the post status automatically. To set the status from the API, map it with a Value map to draft, pending, private, or publish.', 'post-press-api'); ?></p>
 
+            <h3><?php esc_html_e('Conditional field mappings', 'post-press-api'); ?></h3>
+            <p><?php esc_html_e('Each mapping has an optional Condition, disabled by default. Array item count supports equals, does not equal, less than, at most, greater than, and at least. Text supports contains and does not contain a literal character or substring; matching ignores case unless Case-sensitive match is enabled. Text matching supports Unicode. Characters such as ?, *, and . are literal.', 'post-press-api'); ?></p>
+            <p><?php esc_html_e('When a condition matches, Keep the existing value leaves an old value in place and leaves the field unset on a new post. Clear the field removes an old value where clearing is supported. Repeater sub fields can instead be left empty or skip their entire repeater row; they cannot keep old values because rows are rebuilt. Other mappings and the post import continue normally.', 'post-press-api'); ?></p>
+            <p><?php esc_html_e('Example: map dates_text to ACF List Items with No transformation. Enable Array item count equals, enter 1, and choose Clear the field to remove a previous multi-date list when only one date remains. Use at most 1 to include empty lists. A text rule such as Text contains Cancelled can keep or clear a destination when that label appears.', 'post-press-api'); ?></p>
+            <p><?php esc_html_e('Conditions inspect the resolved source before transformation, sanitization, nested mappings, and image downloads. Counts include blanks and duplicates in that source list. If the condition does not match, the mapping runs normally. Missing/null sources use their existing settings; fallback values bypass conditions. Wrong source types fail the record. Constants and expanded templates can use text rules.', 'post-press-api'); ?></p>
+            <p><?php esc_html_e('Preview explains condition results and actions. Repeater subfield details show the first source row; the resulting repeater value reflects all rows. One rule is available per mapping. Rules survive saving, reordering, nesting, and preset export/import. Disabled rules preserve existing change detection, and older presets import with conditions disabled.', 'post-press-api'); ?></p>
+
             <h3><?php esc_html_e('Transformations', 'post-press-api'); ?></h3>
             <?php $this->table([__('Transformation', 'post-press-api'), __('What it does', 'post-press-api')], $rows); ?>
             <p><?php esc_html_e('Lists and objects are never silently turned into the text "Array": choose Join or JSON, or select one item such as sessions[0].', 'post-press-api'); ?></p>
@@ -347,12 +383,18 @@ final class AboutView
         <?php
     }
 
+    /**
+     * Renders ACF field support and the custom List Items mapping requirements.
+     *
+     * @return void
+     */
     private function acf(): void
     {
         $rows = [
             [__('Text, text area, WYSIWYG, number, range, email, URL, oEmbed', 'post-press-api'), __('Converted and validated for the field type.', 'post-press-api')],
             [__('True / false', 'post-press-api'), __('Stored as 1 or 0.', 'post-press-api')],
             [__('Select, radio, button group, checkbox', 'post-press-api'), __('Values must match a choice (by value or label) unless the field allows custom values.', 'post-press-api')],
+            [__('List Items (custom list_items type)', 'post-press-api'), __('Stores an array of plain text items in order. Empty items are removed after sanitizing; duplicates and the string "0" are preserved. The custom field type must already be registered on this site.', 'post-press-api')],
             [__('Date, date & time, time pickers', 'post-press-api'), __('Normalized to ACF\'s storage formats (Ymd, Y-m-d H:i:s, H:i:s).', 'post-press-api')],
             [__('Color picker, link', 'post-press-api'), __('Hex colors; links from a URL or a url/title/target object.', 'post-press-api')],
             [__('Group', 'post-press-api'), __('Sub field mappings read inside the group\'s source object; unmapped sub fields are kept.', 'post-press-api')],
@@ -365,6 +407,8 @@ final class AboutView
             <h2 id="ppapi-about-acf-heading"><?php esc_html_e('Advanced Custom Fields', 'post-press-api'); ?></h2>
             <p><?php esc_html_e('When you choose a post type, the editor lists the ACF field groups assigned to it, with each field\'s label, name, key, type, and parent. Values are saved with ACF\'s update_field() using field keys, so ACF links them correctly even on brand-new posts. Field keys always come from this site; nothing is created for you.', 'post-press-api'); ?></p>
             <?php $this->table([__('Field types', 'post-press-api'), __('How they are filled', 'post-press-api')], $rows); ?>
+            <p><?php esc_html_e('For List Items, map dates_text to the ACF field with No transformation. Each string becomes one item; date labels such as Nov 18, 2026 at 6:30 PM Central stay as text. Join and JSON encode produce strings and cannot fill this field. The source must be an array of strings; objects, nested arrays, and non-string items are rejected.', 'post-press-api'); ?></p>
+            <p><?php esc_html_e('An empty array empties List Items. Missing/null values follow the usual Keep existing value, Clear, or Fail rules; text constants and text fallbacks cannot supply a list. List Items works inside groups and repeaters, where Clear writes an empty array. Support is specific to list_items and does not enable other custom field types.', 'post-press-api'); ?></p>
             <p><?php esc_html_e('If ACF is deactivated or a field a preset needs disappears, only that preset stops — with an explanation in its history. Presets that only use post fields and custom meta never need ACF.', 'post-press-api'); ?></p>
         </section>
         <?php
@@ -474,6 +518,11 @@ define('DISABLE_WP_CRON', true);
         <?php
     }
 
+    /**
+     * Renders event mapping examples, including text and array destinations.
+     *
+     * @return void
+     */
     private function example(): void
     {
         $rows = [
@@ -485,6 +534,7 @@ define('DISABLE_WP_CRON', true);
             ['sessions[0].date', '—', __('ACF date picker (stored as 20261105)', 'post-press-api')],
             ['sessions', '—', __('ACF repeater: date → date sub field, time → time sub field', 'post-press-api')],
             ['dates_text[*]', __('Join list into text, separator \n', 'post-press-api'), __('ACF text area or a meta key', 'post-press-api')],
+            ['dates_text', __('No transformation', 'post-press-api'), __('Custom ACF List Items (array)', 'post-press-api')],
             ['sessions[*].date', __('Join list into text, date/time formatting enabled, output F j, comma-and-space separator', 'post-press-api'), __('ACF text area/text field or a meta key', 'post-press-api')],
             ['location.city', '—', __('ACF text field (null today, so the existing value is kept)', 'post-press-api')],
         ];

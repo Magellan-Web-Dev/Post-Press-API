@@ -289,7 +289,7 @@ final class AdminPage
     }
 
     /**
-     * Strings used by assets/js/admin.js.
+     * Strings used by assets/js/admin.js, including optional mapping conditions.
      *
      * @return array<string, string>
      */
@@ -318,6 +318,16 @@ final class AdminPage
             'chooseField'        => __('— Choose a field —', 'post-press-api'),
             'transform'          => __('Transformation', 'post-press-api'),
             'missingNull'        => __('Missing or null values', 'post-press-api'),
+            'condition'          => __('Condition (optional)', 'post-press-api'),
+            'conditionEnable'    => __('Enable a condition', 'post-press-api'),
+            'conditionWhen'      => __('When the source', 'post-press-api'),
+            'conditionCount'     => __('Number of items', 'post-press-api'),
+            'conditionText'      => __('Literal text or character', 'post-press-api'),
+            'conditionCase'      => __('Case-sensitive match', 'post-press-api'),
+            'conditionAction'    => __('When the condition matches', 'post-press-api'),
+            'conditionHelp'      => __('Checks this mapping\'s source before transformation. If the condition does not match, the mapping runs normally. Missing/null values use their settings below.', 'post-press-api'),
+            'conditionPreserve'  => __('Keep leaves any old value in place; Clear removes it. Only this mapping is affected.', 'post-press-api'),
+            'conditionRepeater'  => __('Repeater rows are rebuilt. Clear this field or skip the entire repeater row when the condition matches.', 'post-press-api'),
             'whenMissing'        => __('When the source is missing', 'post-press-api'),
             'whenNull'           => __('When the source is null', 'post-press-api'),
             'preserve'           => __('Keep the existing value', 'post-press-api'),

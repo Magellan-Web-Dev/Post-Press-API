@@ -10,6 +10,7 @@ use PostPressAPI\Admin\AdminPage;
 use PostPressAPI\Admin\Format;
 use PostPressAPI\Admin\Notices;
 use PostPressAPI\Http\Url;
+use PostPressAPI\Mapping\MappingCondition;
 use PostPressAPI\Mapping\MappingSchema;
 use PostPressAPI\Mapping\Transformer;
 use PostPressAPI\Presets\PresetSchema;
@@ -855,7 +856,7 @@ final class EditorView
     }
 
     /**
-     * Adds the editor's data for the script. Contains no credentials.
+     * Adds editor data and supported condition operators. Contains no credentials.
      *
      * @param array<string, mixed> $preset Preset.
      * @param bool                 $is_new Whether unsaved.
@@ -888,6 +889,7 @@ final class EditorView
             'mappings'      => $preset['mappings'],
             'catalog'       => $registry->is_allowed($post_type) ? $registry->catalog($post_type)->to_editor_array() : null,
             'transforms'    => Transformer::labels(),
+            'conditionOperators' => MappingCondition::labels(),
             'recordPaths'   => $record_paths,
             'responsePaths' => $response_paths,
             'activeRun'     => $active !== null && in_array($active['status'] ?? '', ImportRunner::ACTIVE, true) ? ImportRunner::summary($active) : null,

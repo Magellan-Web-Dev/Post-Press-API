@@ -4,7 +4,7 @@ Fetch JSON records from external APIs — manually or on a schedule — and map 
 
 - **Requires:** WordPress 6.0+, PHP 8.1+
 - **Optional:** Advanced Custom Fields (free or PRO). Repeater fields require ACF PRO.
-- **Version:** 1.0.4
+- **Version:** 1.0.5
 
 Post Press API makes **outbound** requests only. Receiving webhooks and two-way synchronization are out of scope for this version.
 
@@ -106,6 +106,7 @@ Each mapping row has:
 | Source | **Path** (`event.title`), **Constant** (literal text), or **Template** (`{event.title} – {website.host}`; `{{` and `}}` produce literal braces). If any placeholder is missing the template counts as missing; otherwise, if any is null, it counts as null. |
 | Destination | **Post field**, **Custom meta** key, or **ACF field**. |
 | Transformation | See below. |
+| Condition (optional) | Compare the source array's item count or match literal text before transformation. When it matches, keep or clear this field; repeater sub fields can clear or skip their row. Disabled by default. |
 | When missing / when null | **Keep the existing value** (default), **Clear the field**, **Use the fallback value**, or **Mark the record as failed**. Repeater sub fields offer *Leave empty in this row* and *Skip this repeater row* instead of *Keep*. |
 | Fallback | A literal value. Fallbacks skip the transformation and are validated by the destination, so write them in the destination's format (for example `20261105` for an ACF date field, `draft` for status). When the image download option is on, the fallback must be an image URL. |
 | Download image URL to Media Library | Offered for the Featured image, custom meta, and ACF image/URL/text/textarea fields (including sub fields). See [Importing images into the Media Library](#importing-images-into-the-media-library). |
@@ -138,6 +139,25 @@ Only these core fields can be written: **Featured image**, **Title** (plain text
 
 A record's own status field is **never** used as the post status automatically. Mapping a source value to Status requires a **Value map** whose targets are allowed statuses (`draft`, `pending`, `private`, `publish`), with unlisted values either rejected or replaced by a valid fallback. The preset's *Status for new posts* applies only when a post is created.
 
+### Conditional field mappings
+
+Each mapping has an optional **Condition**. Enable it to suppress that field's normal write when its source matches a rule. Other mappings and the post import continue normally. One rule is available per mapping:
+
+- **Array item count:** equals, does not equal, less than, at most, greater than, or at least a non-negative whole number.
+- **Text:** contains or does not contain a literal character or substring, with optional **Case-sensitive match**. Matching ignores case by default and supports Unicode text. Characters such as `?`, `*`, and `.` are literal; no regular expressions or code are evaluated.
+
+Choose **When the condition matches**:
+
+- **Keep the existing value:** no field write. A new post leaves that field unset; an existing post retains its old value.
+- **Clear the field:** remove the previous value using the destination's normal clearing behavior. Destinations that cannot be cleared do not offer this action.
+- **Inside a repeater:** choose **Leave empty in this row** or **Skip this repeater row**. Keeping old subfield values is unavailable because repeater rows are rebuilt. A condition on the whole repeater can keep or clear the whole field.
+
+For your date list, map `dates_text` to **ACF List Items**, use **No transformation**, and enable **Array item count equals → 1**. Choose **Clear the field** if a previous multi-date list should disappear when only one date remains. Choose **Keep the existing value** if you want to retain that earlier list. Use **at most → 1** to apply the same rule to both zero and one item. For a text field, **Text contains → Cancelled** can keep or clear the destination whenever that text appears.
+
+Conditions inspect the resolved source **before transformation**, sanitization, nested field expansion, or image downloading. Array counts include every item in that resolved list, including blanks and duplicates. Constants and expanded templates can use text conditions too. If the rule does not match, the mapping runs normally. Missing/null sources use their existing missing/null settings without evaluating the condition; fallback values are not condition-tested. A present source with the wrong type (for example a string for an array-count rule) fails that record with an explanation.
+
+Preview explains whether the condition matched and what action it selected. Repeater subfield details show the first source row; the resulting repeater value reflects all rows. Disabled conditions preserve existing behavior and change-detection fingerprints. Enabled settings participate in change detection and survive saving, reordering, nesting, and preset export/import; older exports without conditions still import with conditions disabled.
+
 ### Custom meta
 
 Any meta key made of letters, numbers, `_`, `-`, `.`, or `:` can be mapped, except:
@@ -169,6 +189,7 @@ Values are written with `update_field()` **using field keys**, so ACF records th
 | text, textarea, wysiwyg, number, range, email, url, oembed | Converted and validated (`textarea`/`wysiwyg` keep allowed HTML). |
 | true_false | Stored as 1/0. |
 | select, radio, button_group, checkbox | Values must be choice keys (or exact choice labels) unless the field allows custom values. Multi-select and checkbox take lists. |
+| list_items (custom List Items field) | Stores an ordered array of strings through ACF. Each item is sanitized as plain text; empty items are removed, while order, duplicates, and the string `"0"` are preserved. The custom field type must already be registered on the site. |
 | date_picker / date_time_picker / time_picker | Normalized to ACF storage: `Ymd`, `Y-m-d H:i:s`, `H:i:s`. |
 | color_picker, link | Hex colors (rgba when opacity is enabled); link from a URL or a `{url, title, target}` object. |
 | group | Nested mappings resolve relative to the group's source object (`$` = the current record). Unmapped sub fields are left unchanged. |
@@ -178,6 +199,8 @@ Values are written with `update_field()` **using field keys**, so ACF records th
 | file, gallery, relationship, post object, page link, taxonomy, user, flexible content, clone | Not supported — shown disabled with the reason. Use an image field for individual images. |
 
 Sub fields are only mappable inside their group or repeater; they are never flattened into top-level meta. Groups and repeaters can nest up to three levels deep.
+
+**List Items example.** Map source path `dates_text` to your ACF **List Items** field with **No transformation**. A source such as `["Nov 18, 2026 at 6:30 PM Central", "Nov 20, 2026 at 6:30 PM Central", "Dec 2, 2026 at 6:30 PM Central"]` becomes three list items in that order. The dates stay as display text; they are not parsed or converted to another time zone. Use the list itself, without Join or JSON encode. Strings, objects, nested arrays, and non-string items are rejected instead of being coerced. An empty array replaces the stored list with an empty list; missing/null values follow the mapping's existing Preserve, Clear, or Fail behavior. Text constants and text fallbacks cannot supply a list. List Items also works as a sub field inside groups and repeaters, where Clear writes an empty array. This support is specific to the custom `list_items` type; it does not register the field or enable other custom ACF types.
 
 If ACF is deactivated, or a field or field type a preset needs disappears (for example the repeater type without ACF PRO), runs of **that preset** fail with an explanation. Other presets keep working, and presets that only map core fields and meta never need ACF.
 
@@ -260,6 +283,7 @@ A working configuration (field names are examples — choose your site's own fie
 | `sessions[0].date` | — | ACF date picker (stored as `20261105`) |
 | `sessions` | — | ACF repeater, with sub mappings `date` → date sub field and `time` → time sub field (missing/null: *Leave empty in this row*) |
 | `dates_text[*]` | Join list into text, separator `\n` | ACF textarea/text field or a meta key |
+| `dates_text` | No transformation | Custom ACF List Items (`list_items`), stored as an array |
 | `location.city` | — | ACF text field (null today → existing value kept) |
 
 Notes for this payload:
@@ -447,6 +471,10 @@ php tests/run.php Sync       # files whose name contains "Sync"
 
 It uses in-memory WordPress, ACF, and `$wpdb` stubs that reproduce the behaviors that matter here (meta unslashing, `false` returns for unchanged values, values stored as strings, ACF repeater storage, cron duplicate rules, response truncation) and mocked HTTP responses based on the sample payload. Each test file runs in its own PHP process so some files can run without ACF loaded. Any PHP warning or deprecation fails the test that caused it.
 
+List Items coverage includes discovery, array validation and sanitization, previews and imports, repeated and reordered lists, missing/null/empty values, nested fields, failed writes, and preset transfer. Run it separately with `php tests/run.php ListItems`.
+
+Conditional mapping coverage includes count comparisons, literal and Unicode text matching, preserving/clearing values, invalid types and settings, nested fields, suppressed image downloads, preview explanations, unchanged legacy fingerprints, and preset transfer. Run it separately with `php tests/run.php Condition`. The DOM tests also exercise condition controls, action restrictions, reordering, and reloads.
+
 The mapping editor also has DOM integration tests that load the actual PHP-rendered editor and admin script with jsdom. Install the test dependency outside the plugin:
 
 ```sh
@@ -479,6 +507,11 @@ This writes `build/post-press-api-<version>.zip` with a single top-level `post-p
 - On multisite, schedules are per site; activate the plugin per site rather than network-wide.
 
 ## Changelog
+
+### 1.0.5
+
+- **Conditional field mappings.** Optional source array-count and literal text rules can keep or clear a destination, or skip a repeater row. Conditions run before transformations and downloads, explain their decisions in previews, and remain disabled for existing mappings.
+- **Custom ACF List Items.** Map arrays of strings directly to an existing `list_items` field, including group and repeater sub fields, using No transformation. Existing field types keep their current handling.
 
 ### 1.0.4
 

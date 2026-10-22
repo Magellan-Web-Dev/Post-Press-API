@@ -17,6 +17,7 @@ if (!defined('ABSPATH')) exit;
  *   target       core field name, meta key, or ACF field key
  *   transform    one of Transformer::TYPES
  *   options      transformation options (separator, join_datetime, formats, time zones, decimals, value map)
+ *   condition    optional rule on the source before transformation; disabled by default
  *   on_missing   preserve | clear | fallback | fail | skip_row
  *   on_null      same choices as on_missing
  *   fallback     literal fallback value
@@ -83,7 +84,8 @@ final class MappingSchema
     }
 
     /**
-     * Normalizes one row.
+     * Normalizes one row, including an opt-in source condition.
+     * Invalid condition operators/actions are retained for semantic validation.
      *
      * @param array<string, mixed> $row   Raw row.
      * @param int                  $depth Nesting depth.
@@ -112,6 +114,8 @@ final class MappingSchema
         }
 
         $decimals = trim(self::text($options['decimals'] ?? '', 4));
+        $condition = is_array($row['condition'] ?? null) ? $row['condition'] : [];
+        $condition += MappingCondition::DEFAULTS;
 
         return [
             'id'          => $id,
@@ -120,6 +124,13 @@ final class MappingSchema
             'target_type' => self::choice($row['target_type'] ?? '', Destination::CATEGORIES, ''),
             'target'      => trim(self::text($row['target'] ?? '', 191)),
             'transform'   => self::choice($row['transform'] ?? '', Transformer::TYPES, Transformer::NONE),
+            'condition'   => [
+                'enabled'        => !empty($condition['enabled']),
+                'operator'       => self::text($condition['operator'], 40),
+                'value'          => self::text($condition['value'], self::MAX_TEXT),
+                'case_sensitive' => !empty($condition['case_sensitive']),
+                'action'         => self::text($condition['action'], 40),
+            ],
             'options'     => [
                 'separator'       => self::text($options['separator'] ?? ', ', 20),
                 'join_datetime'   => !empty($options['join_datetime']),
@@ -146,6 +157,7 @@ final class MappingSchema
      * Mapping configuration that affects written values, for fingerprints.
      *
      * Row IDs are excluded so reordering in the UI alone does not force updates.
+     * Disabled conditions are omitted to preserve fingerprints of older presets.
      *
      * @param list<array<string, mixed>> $rows Normalized rows.
      *
@@ -157,6 +169,9 @@ final class MappingSchema
         foreach ($rows as $row) {
             $copy = $row;
             unset($copy['id']);
+            if (empty($copy['condition']['enabled'])) {
+                unset($copy['condition']);
+            }
             // Adding an opt-in Join option must not invalidate existing imports.
             if ($copy['transform'] !== Transformer::JOIN || empty($copy['options']['join_datetime'])) {
                 unset($copy['options']['join_datetime']);

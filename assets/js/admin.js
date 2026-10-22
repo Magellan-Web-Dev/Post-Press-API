@@ -321,6 +321,7 @@
 		};
 	}
 
+	/** Restores saved row settings, including disabled conditions on older presets. */
 	function normalizeRow(row) {
 		var options = Object.assign(defaultOptions(), row.options || {});
 		options.map = Array.isArray(options.map) ? options.map.map(function (pair) {
@@ -334,6 +335,7 @@
 			target: row.target || '',
 			transform: row.transform || 'none',
 			options: options,
+			condition: Object.assign({ enabled: false, operator: 'count_eq', value: '1', case_sensitive: false, action: 'preserve' }, row.condition || {}),
 			on_missing: row.on_missing || 'preserve',
 			on_null: row.on_null || 'preserve',
 			media: Object.assign({ download: false, output: 'id' }, row.media || {}),
@@ -342,13 +344,15 @@
 		};
 	}
 
+	/** Creates a row with actions appropriate for top-level fields or repeater items. */
 	function newRow(context) {
 		var behavior = context === 'repeater' ? 'clear' : 'preserve';
 		return normalizeRow({
 			source_type: 'path',
 			target_type: context === 'top' ? 'core' : 'acf',
 			on_missing: behavior,
-			on_null: behavior
+			on_null: behavior,
+			condition: { action: behavior }
 		});
 	}
 
@@ -575,8 +579,10 @@
 		]);
 	}
 
-	function renderRow(row, index, list, parent, depth, parentPrefix) {
+	/** Renders a mapping with source, destination, condition, and value handling controls. */
+	function renderRow(row, index, list, parent, depth, parentPrefix, insideRepeater) {
 		var context = parent === null ? 'top' : (parent.type === 'repeater' ? 'repeater' : 'group');
+		insideRepeater = !!insideRepeater || context === 'repeater';
 		var acf = acfIndex();
 		var descriptor = row.target_type === 'acf' ? acf[row.target] || null : null;
 		var isContainer = !!(descriptor && descriptor.container);
@@ -728,6 +734,8 @@
 		}
 		fieldset.appendChild(destCol);
 
+		fieldset.appendChild(renderCondition(row, base, insideRepeater ? 'repeater' : context, clearable));
+
 		/* Transformation */
 		if (!isContainer) {
 			var transformCol = el('div', { className: 'ppapi-mapping__col' }, [el('h4', { text: i18n.transform })]);
@@ -814,7 +822,7 @@
 				rowId: row.id
 			};
 			row.children.forEach(function (child, childIndex) {
-				nested.appendChild(renderRow(child, childIndex, row.children, childParent, depth + 1, prefix));
+				nested.appendChild(renderRow(child, childIndex, row.children, childParent, depth + 1, prefix, insideRepeater));
 			});
 
 			var canAdd = depth + 1 < limits.maxDepth && row.children.length < limits.maxChildren;
@@ -835,6 +843,57 @@
 		}
 
 		return fieldset;
+	}
+
+	/**
+	 * Renders one opt-in rule on the mapping's untransformed source.
+	 * Disabled rules retain their settings. Enabled actions follow destination
+	 * clearing rules and never preserve a value inside a rebuilt repeater row.
+	 */
+	function renderCondition(row, base, context, clearable) {
+		var condition = row.condition;
+		var box = el('div', { className: 'ppapi-mapping__col' }, [el('h4', { text: i18n.condition })]);
+		var toggle = el('input', { type: 'checkbox', id: base + '-condition-enabled', checked: condition.enabled });
+		toggle.addEventListener('change', function () {
+			condition.enabled = toggle.checked;
+			renderMappings();
+		});
+		box.appendChild(el('label', { for: toggle.id }, [toggle, document.createTextNode(' ' + i18n.conditionEnable)]));
+		if (!condition.enabled) {
+			return box;
+		}
+		box.appendChild(el('p', { className: 'description', text: i18n.conditionHelp }));
+		var operators = Object.keys(data.conditionOperators || {}).map(function (key) {
+			return [key, data.conditionOperators[key]];
+		});
+		box.appendChild(select(base + '-condition-operator', i18n.conditionWhen, operators, condition.operator, function (value) {
+			condition.operator = value;
+			renderMappings();
+		}));
+		var isCount = condition.operator.indexOf('count_') === 0;
+		box.appendChild(textInput(base + '-condition-value', isCount ? i18n.conditionCount : i18n.conditionText, condition.value, function (value) {
+			condition.value = value;
+			sync();
+		}, isCount ? { inputmode: 'numeric', pattern: '[0-9]+', className: 'code' } : {}));
+		if (!isCount) {
+			var caseToggle = el('input', { type: 'checkbox', id: base + '-condition-case', checked: condition.case_sensitive });
+			caseToggle.addEventListener('change', function () {
+				condition.case_sensitive = caseToggle.checked;
+				sync();
+			});
+			box.appendChild(el('label', { for: caseToggle.id }, [caseToggle, document.createTextNode(' ' + i18n.conditionCase)]));
+		}
+		var actions = context === 'repeater' ? [['clear', i18n.clearRow], ['skip_row', i18n.skipRow]] : [['preserve', i18n.preserve]];
+		if (context !== 'repeater' && clearable) {
+			actions.push(['clear', i18n.clear]);
+		}
+		condition.action = coerceBehavior(condition.action, actions);
+		box.appendChild(select(base + '-condition-action', i18n.conditionAction, actions, condition.action, function (value) {
+			condition.action = value;
+			sync();
+		}));
+		box.appendChild(el('p', { className: 'description', text: context === 'repeater' ? i18n.conditionRepeater : i18n.conditionPreserve }));
+		return box;
 	}
 
 	function renderTransformOptions(row, base) {

@@ -22,11 +22,15 @@ use PostPressAPI\Mapping\ValueInspector;
  * Storage formats follow ACF: date_picker "Ymd", date_time_picker
  * "Y-m-d H:i:s", time_picker "H:i:s", true_false 1/0, link arrays with
  * url/title/target, and choice keys for select/radio/checkbox/button_group.
+ * The custom list_items type stores an ordered list of sanitized strings.
  */
 final class AcfNormalizer
 {
     /**
      * Normalizes a value for a non-container field.
+     *
+     * list_items requires a list of strings; it preserves item order and
+     * duplicates while removing items that sanitize to an empty string.
      *
      * @param array<string, mixed> $field   ACF field definition.
      * @param mixed                $value   Transformed value (never null).
@@ -77,6 +81,9 @@ final class AcfNormalizer
             case 'checkbox':
                 return $this->choice_list($field, $value);
 
+            case 'list_items':
+                return $this->list_items($value);
+
             case 'date_picker':
                 $date = $this->date($value, $site_tz);
                 if (!$date->has_date) {
@@ -115,6 +122,8 @@ final class AcfNormalizer
     /**
      * The value written when a nested mapping clears a sub field.
      *
+     * List Items uses an empty array, including inside groups and repeaters.
+     *
      * @param array<string, mixed> $field ACF field definition.
      *
      * @return mixed
@@ -137,11 +146,50 @@ final class AcfNormalizer
             return $values;
         }
 
-        if ($type === 'checkbox' || ($type === 'select' && !empty($field['multiple']))) {
+        if ($type === 'list_items' || $type === 'checkbox' || ($type === 'select' && !empty($field['multiple']))) {
             return [];
         }
 
         return '';
+    }
+
+    /**
+     * Prepares the custom List Items field's native array value.
+     *
+     * Mirrors its save handler: sanitize text, remove empty strings, and
+     * reindex without sorting or deduplicating. The string "0" is retained.
+     * Rejects non-string items before ACF can silently discard invalid data.
+     *
+     * @param mixed $value Source list; JSON strings and objects are not accepted.
+     *
+     * @return list<string>
+     *
+     * @throws MappingError When the source is not a list of strings.
+     */
+    private function list_items(mixed $value): array
+    {
+        if (!is_array($value) || !array_is_list($value)) {
+            throw new MappingError(__('List Items requires an array of text items. Select the list source path and use No transformation.', 'post-press-api'));
+        }
+
+        $items = [];
+        foreach ($value as $index => $item) {
+            if (!is_string($item)) {
+                throw new MappingError(sprintf(
+                    /* translators: 1: one-based item position, 2: value type. */
+                    __('List Items item %1$d must be text; received %2$s.', 'post-press-api'),
+                    $index + 1,
+                    ValueInspector::type_label($item)
+                ));
+            }
+
+            $text = sanitize_text_field($item);
+            if ($text !== '') {
+                $items[] = $text;
+            }
+        }
+
+        return $items;
     }
 
     /**

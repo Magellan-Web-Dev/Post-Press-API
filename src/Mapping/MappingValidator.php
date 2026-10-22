@@ -42,7 +42,7 @@ final class MappingValidator
     }
 
     /**
-     * Validates one row (recursively for nested rows).
+     * Validates one row, its optional condition, and nested rows.
      *
      * @param array<string, mixed>   $row      Row.
      * @param string                 $label    Row label for messages.
@@ -51,10 +51,11 @@ final class MappingValidator
      * @param array<string, bool>    $seen     Destinations already used at this level.
      * @param list<string>           $errors   Error accumulator.
      * @param list<string>           $warnings Warning accumulator.
+     * @param bool                   $condition_in_repeater Whether an ancestor is a repeater; applies only to conditions.
      *
      * @return void
      */
-    private function validate_row(array $row, string $label, DestinationCatalog $catalog, ?Destination $parent, array &$seen, array &$errors, array &$warnings): void
+    private function validate_row(array $row, string $label, DestinationCatalog $catalog, ?Destination $parent, array &$seen, array &$errors, array &$warnings, bool $condition_in_repeater = false): void
     {
         $add = static function (string $message) use (&$errors, $label): void {
             $errors[] = $label . ': ' . $message;
@@ -108,6 +109,10 @@ final class MappingValidator
         }
 
         $in_repeater = $parent !== null && $parent->acf_type() === 'repeater';
+        $condition_in_repeater = $condition_in_repeater || $in_repeater;
+        foreach (MappingCondition::errors($row['condition'] ?? MappingCondition::DEFAULTS, $destination, $condition_in_repeater) as $error) {
+            $add($error);
+        }
 
         foreach (['on_missing' => __('When missing', 'post-press-api'), 'on_null' => __('When null', 'post-press-api')] as $key => $behavior_label) {
             $behavior = (string) $row[$key];
@@ -156,7 +161,7 @@ final class MappingValidator
 
             $child_seen = [];
             foreach ($row['children'] as $index => $child) {
-                $this->validate_row($child, $label . ' › ' . ($index + 1), $catalog, $destination, $child_seen, $errors, $warnings);
+                $this->validate_row($child, $label . ' › ' . ($index + 1), $catalog, $destination, $child_seen, $errors, $warnings, $condition_in_repeater || $destination->acf_type() === 'repeater');
             }
             return;
         }
