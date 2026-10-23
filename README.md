@@ -4,7 +4,7 @@ Fetch JSON records from external APIs — manually or on a schedule — and map 
 
 - **Requires:** WordPress 6.0+, PHP 8.1+
 - **Optional:** Advanced Custom Fields (free or PRO). Repeater fields require ACF PRO.
-- **Version:** 1.0.5
+- **Version:** 1.0.6
 
 Post Press API makes **outbound** requests only. Receiving webhooks and two-way synchronization are out of scope for this version.
 
@@ -62,10 +62,10 @@ The plugin never registers post types or fields. Create the destination post typ
 | General | Name and enabled state. Disabled presets never run (Test Request and Dry Run still work). |
 | 1. Request | URL, GET/POST, query parameters, headers, JSON body (POST), authentication, timeout (1–60 s), maximum response size (16 KB–10 MB), retries (0–5). |
 | 2. Response selection | Records path, optional success flag, record identity (single ID path or composite), optional sample JSON, Test Request. |
-| 3. Field mappings | Destination post type, status and author for new posts, mapping rows. |
+| 3. Field mappings | Destination post type, status and author for new posts, handling of shortcodes and blocks in imported content, mapping rows. |
 | 4. Duplicate handling | Duplicate policy, connecting existing posts, trashed posts. |
 | 5. Pagination | None, offset/limit, or page number; stop conditions and safety limits. |
-| 6. Schedule | Manual, every 5/15 minutes, hourly, twice daily, daily, or a custom interval (minimum 5 minutes); records per batch. |
+| 6. Schedule | Manual, every 5/15 minutes, hourly, twice daily, daily, or a custom interval (minimum 5 minutes); the account scheduled runs act as; records per batch. |
 | 7. Preview & run | Dry run, Run now (optionally re-applying values to unchanged posts), cancel, recent runs (which can be deleted here). |
 
 The preset list shows each preset's enabled state, destination, schedule, last run, next run (in the site time zone), and last result. Row actions: Edit, Export JSON, Duplicate (the copy starts disabled), Enable/Disable, History, Delete. The **Import preset JSON** button above the list imports a preset exported from another site (see [Exporting and importing presets](#exporting-and-importing-presets)). The editor header links to **Export JSON** and **Run history** for the open preset.
@@ -133,11 +133,29 @@ No mapping ever evaluates PHP, JavaScript, or expressions. Arrays and objects ar
 
 ### Post fields
 
-Only these core fields can be written: **Featured image**, **Title** (plain text), **Content** and **Excerpt** (rich text filtered with `wp_kses_post`, so allowed formatting stays and scripts are removed), **Slug**, **Publish date**, **Status**, and **Author** (user ID, login, or email of a user who can edit the post type). IDs, post type, parent, GUID, and other internal properties are never writable.
+Only these core fields can be written: **Featured image**, **Title** (plain text), **Content** and **Excerpt** (rich text filtered with `wp_kses_post`, so allowed formatting stays and scripts are removed; see [Shortcodes and blocks in imported content](#shortcodes-and-blocks-in-imported-content)), **Slug**, **Publish date**, **Status**, and **Author** (user ID, login, or email of a user who can edit the post type). IDs, post type, parent, GUID, and other internal properties are never writable.
 
 **Featured image** accepts either the ID of an existing local image attachment or, with *Download image URL to Media Library* enabled, a remote image URL. *Clear the field* removes the featured image (the attachment itself stays in the Media Library). The `_thumbnail_id` meta key stays blocked; use this field instead.
 
 A record's own status field is **never** used as the post status automatically. Mapping a source value to Status requires a **Value map** whose targets are allowed statuses (`draft`, `pending`, `private`, `publish`), with unlisted values either rejected or replaced by a valid fallback. The preset's *Status for new posts* applies only when a post is created.
+
+### Shortcodes and blocks in imported content
+
+`wp_kses_post` removes unsafe HTML, but it does **not** remove WordPress shortcodes (`[tag]`) or block markup (`<!-- wp:name /-->`). Both are executable: when the post is displayed, any matching shortcode or dynamic block installed on the site — now or later — runs with the data the API supplied. HTML sanitization alone therefore does not make external content safe to render.
+
+The **Shortcodes and blocks in imported content** setting (section 3) decides what happens to post content, excerpts, and ACF WYSIWYG fields:
+
+| Setting | Shortcodes | Block markup |
+|---|---|---|
+| **Neutralize** (default for new presets) | Every `[` is stored as `&#91;`, so it displays as `[` but no shortcode can run. | Block delimiter comments are removed; the HTML inside them is kept and renders as classic content, so dynamic blocks (latest posts, reusable blocks, plugin blocks) never render. |
+| **Allow only listed shortcodes** | Listed tags (letters, numbers, `-`, `_`; up to 20) stay active; every other `[` is neutralized. A tag is compared by the complete name WordPress reads (names may contain quotes and other punctuation), so `[gallery"x]` is not treated as `gallery`. WordPress's `[[gallery]]` escape still shows the literal text. | Removed, as above. |
+| **Trusted source** | Kept. | Kept. |
+
+Choose *Trusted source* only for APIs whose content you control; the editor and validation warn about it.
+
+**Existing presets.** Presets saved before this setting existed are treated as *Trusted source*, so upgrading changes nothing about how they import and never rewrites existing posts. The editor flags them; choose another setting and save to switch. After switching, the next run updates only posts whose imported content actually contains shortcodes or block markup (their normalized content changes); other posts are untouched. Posts are never rewritten by the upgrade itself.
+
+**Not covered.** Plain post meta and other ACF field types (text, textarea, and so on) are stored as data without this treatment, so a value like `[1]` is kept exactly. Do not pass imported meta through `do_shortcode()` or `do_blocks()` in a theme. Auto-embeds (a bare URL on its own line) are standard WordPress behavior and are not changed.
 
 ### Conditional field mappings
 
@@ -231,7 +249,7 @@ Without the checkbox, the Featured image and ACF image fields accept only the ID
 - A per-URL lock prevents two runs from downloading the same image at once; the losing record fails and is retried on the next run.
 - Temporary files are always removed. Error messages never echo the image URL, so signed URLs do not leak into history.
 
-**Permissions.** A preset that downloads images also requires the `upload_files` capability — for the administrator saving or running it, and for the preset's default author when it runs on a schedule.
+**Permissions.** A preset that downloads images also requires the `upload_files` capability — for the account the run acts as (see [Scheduling and WP-Cron](#scheduling-and-wp-cron)) and for the preset's default author.
 
 Replaced or no-longer-used images are **never deleted** from the Media Library; clean them up manually if needed.
 
@@ -332,7 +350,9 @@ A run keeps requesting pages while:
 
 An empty page ends the run (as *stopped early* if the API claimed more records). A page identical to an earlier one stops the run with an error — usually a sign the API ignores the configured parameter names. Reaching *maximum pages* or *maximum records* while more records remain marks the run **Stopped early (more records remain)**, never complete.
 
-**Batches.** Runs execute in short steps: each step processes up to *records per batch* buffered records, or fetches one page, within a time budget, saving progress after every record. The admin screen drives steps while it is open; a single `ppapi_continue_run` cron event always resumes an unfinished run in the background. Manual and scheduled runs use the same pipeline.
+**Maximum records per run is a hard limit.** It applies to every run — with or without pagination — and counts every record the run imports. If a page contains more records than the run may still import (for example, an API that ignores the requested page size, or a single unpaginated response), only the remaining allowance is kept, in API order; the rest are dropped before the page is stored for processing, so they cause no post writes and no image downloads. The run then ends as *Stopped early*, and its message says how many received records were not imported. The limit is also checked before each record, so a run that an earlier version had already buffered stops at the limit after upgrading. The response-size limit still applies to every page.
+
+**Batches.** Runs execute in short steps: each step processes up to *records per batch* buffered records, or fetches one page, within a time budget, saving progress after every record. The admin screen drives steps while it is open; a single `ppapi_continue_run` cron event always resumes an unfinished run in the background. Manual and scheduled runs use the same pipeline, and every step — including background continuations — acts as the run's account (see [Scheduling and WP-Cron](#scheduling-and-wp-cron)).
 
 **Snapshots.** A run uses a snapshot of the preset taken when it starts. Edits made during a run apply to the next run. Disabling or deleting a preset cancels its run; *Cancel run* stops a run after its current record.
 
@@ -368,11 +388,22 @@ The file never contains stored credentials (bearer tokens or API keys), the pres
 
 Warnings point out values that are specific to the source site, such as author mappings and local attachment IDs used without image download. Expand **Review all imported settings** to inspect the full configuration. **Create disabled preset** saves it once nothing is left to resolve.
 
+Files exported by 1.0.5 and earlier predate the [shortcode and block setting](#shortcodes-and-blocks-in-imported-content). They still import, with *Neutralize* (the default for new presets), and the review screen says so; choose another setting in the editor before enabling the preset if the API's content must run shortcodes or blocks.
+
 The imported preset always gets a **new ID** and starts **disabled**. Credentials must be re-entered, and its schedule only takes effect once you enable it. Importing never fetches data or downloads images. Posts imported by the original preset on another site are not migrated, and because a record's identity includes the preset ID, existing posts on this site are not linked automatically — use *Connect existing posts* if the new preset should take over posts that are already here. The destination post type and ACF field groups must already exist on this site.
 
 ## Scheduling and WP-Cron
 
 Each enabled, scheduled preset has exactly one recurring `ppapi_scheduled_run` event whose argument is the preset ID. Saving a preset keeps its event when the schedule is unchanged and replaces it otherwise (collapsing any duplicates). Disabling or deleting a preset removes its scheduled and continuation events. Deactivating the plugin removes every plugin event; reactivating it restores events for enabled presets. Times are shown in the site time zone.
+
+**Which account a run acts as.** Every run acts as one explicit WordPress user, recorded when the run starts:
+
+- **Manual runs** act as the administrator who clicked *Run now*. Background continuations of that run keep acting as that user — never as whoever happens to trigger WP-Cron.
+- **Scheduled runs** act as the user who **last saved or enabled the preset**; the Schedule section shows who that is. Saving or enabling a preset already requires the post type's capabilities, so another administrator takes over scheduled runs simply by saving the preset. Presets saved by earlier versions follow the same rule (they already record who last saved them); if that user no longer exists, scheduled runs are recorded as failed with instructions until someone saves the preset.
+
+Each step switches to that account, re-checks that it still exists and still holds the post type's capabilities (create/edit, `publish_posts` when the preset can publish, `edit_others_posts` when new posts belong to someone else, `upload_files` for image downloads), and restores the previous user afterwards. If the account was deleted or lost a capability, the run stops as *Failed* without writing anything more.
+
+Before any existing post is changed — adopted through *Connect existing posts*, updated, completed after an earlier failure, restored from the trash, given a new author, or given a publishing status — the account's own permissions for **that post** are checked with WordPress's object-level capabilities (`edit_post`, plus `delete_post` to restore from the trash, `edit_others_posts` to assign another author, and `publish_posts` to publish). `wp_update_post()` and `update_post_meta()` do not check permissions themselves, so a record the account may not change fails with an explanation and the post is left untouched. Previews report the same failures.
 
 WP-Cron only runs when the site receives visits, so scheduled times are approximate. For dependable timing, disable WP-Cron's visit trigger and call it from the server:
 
@@ -389,14 +420,14 @@ define('DISABLE_WP_CRON', true);
 
 ## Security and data handling
 
-- **Capabilities.** Every screen, form action, and REST route requires `manage_options`. Saving or running a preset also requires the destination post type's create/edit capabilities (plus `publish_posts` when the preset can publish, `edit_others_posts` when new posts belong to someone else, and `upload_files` when a mapping downloads images). Scheduled runs re-check that the default author can still edit (and if needed publish, or upload files to) the post type.
+- **Capabilities.** Every screen, form action, and REST route requires `manage_options`. Saving or running a preset also requires the destination post type's create/edit capabilities (plus `publish_posts` when the preset can publish, `edit_others_posts` when new posts belong to someone else, and `upload_files` when a mapping downloads images). Runs act as an explicit account whose capabilities are re-checked on every step, and every change to an existing post is authorized against that account's permissions for the actual post; the default author must also be able to edit (and if needed publish, or upload files to) the post type. See [Scheduling and WP-Cron](#scheduling-and-wp-cron).
 - **Nonces.** Form submissions and row actions use per-action nonces; REST routes (`ppapi/v1`) use WordPress REST cookie authentication with explicit permission callbacks. Preset exports require a POST with a per-preset nonce, imports a nonce on every upload, review, and save step, and history deletion a per-preset history nonce in addition to the REST nonce.
 - **Image downloads** follow the same public-address rules as API requests, never carry the preset's credentials, headers, or cookies, and are checked for size, pixel count, and real image type before WordPress stores them. Attachments store only a hash of the source URL; previews and messages hide image URL query strings. See [Importing images into the Media Library](#importing-images-into-the-media-library).
 - **Preset files.** Exports exclude stored credentials; imported files are size-limited and validated strictly, re-validated on every review step, and always create a new, disabled preset.
-- **Outbound requests** are made server-side with `wp_safe_remote_request()`, which refuses private and local addresses. TLS verification stays on. Redirects are followed by the plugin (at most three); when a credential is configured, a redirect to a different scheme, host, or port is refused, so credentials are never forwarded to another host.
+- **Outbound requests** are made server-side with `wp_safe_remote_request()`, which refuses private and local addresses; every redirect hop is re-validated. TLS verification stays on. Redirects are followed by the plugin (at most three) and only within the endpoint's origin — same scheme, host, and effective port. A redirect to any other origin, including an `https://` → `http://` downgrade, stops the request for **every** authentication mode, because custom headers, query values, and POST bodies can be as sensitive as a credential; nothing is sent to the new address. The error names only the refused origin (no path or query). If an API has permanently moved, enter the new address as the endpoint URL. Same-origin `303` responses (and `301`/`302` after a POST) continue as GET without the body; `307`/`308` keep the method and body.
 - **Credentials** (bearer tokens and API keys) are stored server-side in a separate, non-autoloaded option per preset, never in the preset itself. They are never sent to the browser: the editor shows only whether one is saved, a blank field keeps it, and removing it is explicit. A credential remembers the endpoint origin it was entered for; changing the endpoint host requires re-entering it. Credentials require `https://` endpoints (filterable). WordPress has no built-in secret encryption, so credentials are stored as entered — protect database access and backups, and prefer narrowly scoped keys.
-- **Redaction.** Previews, run history, and the activity log never contain credentials — even if an API echoes one back, it is masked. Logs contain identifiers and short messages, not payloads; URLs are logged without query strings.
-- **Output.** Values from APIs are escaped on output; the admin script inserts all such values as text. Post content and excerpts keep formatting allowed by `wp_kses_post`.
+- **Redaction.** Diagnostics are masked before they are returned, stored, or logged: Test Request and dry-run responses (successful or failed), failed-record details, run status and summaries, run history, the activity log, and the `ppapi_run_finished` and `ppapi_log` hooks. Masking covers the preset's saved credential (even when it was not sent, for example while testing a replacement), the credential in use, and values of headers or query parameters whose names suggest a key, token, secret, password, or signature. It also covers common encoded forms (URL-, JSON-, HTML-, and slash-escaped) and a credential that a preview cut short (`sk_live_ab…`); response snippets are masked before they are cut to length. History and log entries are masked again when read, so entries written by earlier versions are not displayed with a credential. Masking applies only to diagnostics — imported post content and meta are stored exactly as mapped. It matches known values; it cannot recognize a secret it was never told about (for example one embedded in a URL path or request body template). Logs contain identifiers and short messages, not payloads; URLs are logged without query strings.
+- **Output.** Values from APIs are escaped on output; the admin script inserts all such values as text. Post content and excerpts keep formatting allowed by `wp_kses_post`. HTML filtering does not stop shortcodes or block markup from running when a post is displayed; new presets neutralize them by default (see [Shortcodes and blocks in imported content](#shortcodes-and-blocks-in-imported-content)).
 - **Retention.** Run history keeps 25 runs per preset (individual, selected, or all entries can be deleted at any time); the activity log keeps 200 entries; previews return at most 20 KB of formatted JSON. Sample JSON pasted into a preset (max 256 KB) is stored with that preset — do not paste credentials or data you do not want stored.
 - **Storage.** Presets, credentials, samples, run state, history, and the log are non-autoloaded options; only the small preset index (`ppapi_presets`, used for cron schedules) is autoloaded.
 
@@ -407,14 +438,15 @@ define('DISABLE_WP_CRON', true);
 
 ## GitHub updates
 
-Updates come from GitHub releases. **The repository is configured in exactly one place:**
+Updates come from GitHub releases of [Magellan-Web-Dev/Post-Press-API](https://github.com/Magellan-Web-Dev/Post-Press-API); the plugin is not published on WordPress.org. The repository is set in the `REPOSITORY` constant in `src/Updates/GitHubUpdater.php`, and the plugin header declares the same project:
 
 ```
-src/Updates/GitHubUpdater.php, line 52:
-    private const REPOSITORY = '';
+Update URI: https://github.com/Magellan-Web-Dev/Post-Press-API
 ```
 
-Enter it as `'owner/repo'`. While it is empty (or malformed) the updater registers no hooks: it makes no GitHub requests, adds no "Check for updates" link, and shows no update notices.
+Change both together if the repository ever moves. While `REPOSITORY` is empty (or malformed) the updater registers no hooks: it makes no GitHub requests, adds no "Check for updates" link, and shows no update notices.
+
+**Update source isolation.** Because of the `Update URI` header, WordPress (5.8+) does not offer this plugin updates from WordPress.org — even if a directory plugin uses the same `post-press-api` slug — and asks the updater through the `update_plugins_github.com` filter instead. As a second safeguard, any update entry for `post-press-api/post-press-api.php` that does not carry this Update URI and a package from this repository is removed when the update list is saved and when it is read, including while GitHub is unreachable or reports the installed version. Entries for other plugins (including other plugins updated from GitHub) are never changed. Auto-updates keep working: the plugin is always listed either as having an update or as up to date.
 
 Once configured, the updater adds the latest release to WordPress's update checks (cached for 12 hours), supplies the "View details" information, and adds a nonce- and `update_plugins`-protected **Check for updates** link. Tags such as `v1.2.0` are compared with the installed version, and the tag's ZIP is the package. GitHub archives extract into a version-stamped folder, so after installation the folder is moved to `post-press-api/`. If a `post-press-api/` folder unexpectedly still exists, it is first moved aside to `wp-content/upgrade/`; if that or the final move fails, the existing installation is kept (or restored) and the update is reported as failed — no folder is ever deleted to make room, and nothing outside this plugin's folders is touched.
 
@@ -484,7 +516,9 @@ NODE_PATH=/tmp/ppapi-mapping-ui/node_modules node --test tests/admin-mappings.te
 
 These cover date option controls, moving across a 30-row list, nested mappings, keyboard use, invalid positions, and serialized settings after reload. They use the same WordPress stubs and do not access a live site.
 
-Note: the repository's `.gitignore` excludes `/tests/`, so the suite is kept locally and is not part of releases.
+Security regression tests cover cross-origin and downgrade redirects (`RedirectSecurity`), credential redaction across every diagnostic path (`Redaction`), per-post authorization and run accounts including cron continuations (`RunPermissions`), the hard record limit (`RecordLimit`), update source isolation (`UpdateSource`), and the shortcode/block policy (`MarkupPolicy`).
+
+**Keeping tests out of releases.** `tests/` is tracked in git so the suite travels with the code, but it never ships: `.gitattributes` marks `tests/` and other development files `export-ignore`, so GitHub's tag archives — which the built-in updater installs — leave them out, and `./build.sh` excludes them from the upload zip and fails if any slipped in.
 
 ## Building a release zip
 
@@ -494,7 +528,7 @@ To produce an installable package for **Plugins → Add New → Upload Plugin**:
 ./build.sh
 ```
 
-This writes `build/post-press-api-<version>.zip` with a single top-level `post-press-api/` folder. Git files, `tests/`, `build/`, `.DS_Store`, and the script itself are left out. The version comes from the plugin header, and the build stops if it does not match `PPAPI_VERSION`, so bump both together. Rebuilding the same version overwrites that zip. `build/` is git-ignored.
+This writes `build/post-press-api-<version>.zip` with a single top-level `post-press-api/` folder. Git files, `tests/`, `build/`, `.DS_Store`, and the script itself are left out, and the build fails if the zip contains any of them. The version comes from the plugin header, and the build stops if it does not match `PPAPI_VERSION`, so bump both together. Rebuilding the same version overwrites that zip. `build/` is git-ignored.
 
 ## Limitations
 
@@ -503,10 +537,22 @@ This writes `build/post-press-api-<version>.zip` with a single top-level `post-p
 - Image imports handle one image per field (JPEG, PNG, GIF, WebP, AVIF; up to 10 MB / 40 megapixels). ACF file and gallery fields are not supported, and replaced images are never removed from the Media Library.
 - ACF relationship-type fields, flexible content, and clone fields are not supported.
 - Credentials are stored unencrypted in the database (as with most WordPress plugins), and preset exports never include them.
+- Redaction masks known values only (saved credentials and credential-like header/query values); secrets typed into a URL path or a body template are not recognized.
+- Redirects are never followed across origins, so an API that moves to a new host needs its endpoint URL updated.
+- Presets saved before the shortcode/block setting existed stay on *Trusted source* until an administrator changes them, and plain meta and non-WYSIWYG ACF values are never neutralized.
 - Preset files move configuration only; posts, media, and history are not transferred between sites.
 - On multisite, schedules are per site; activate the plugin per site rather than network-wide.
 
 ## Changelog
+
+### 1.0.6
+
+- **Redirects stay within the endpoint's origin** for every authentication mode; cross-origin redirects and HTTPS-to-HTTP downgrades are refused before anything is sent. Previously only presets with a dedicated credential were protected, so custom headers and POST bodies could follow a redirect to another host.
+- **Consistent credential redaction** for failed-record details, run state, history, REST run summaries, every preview error path, HTTP reason phrases, the activity log, and diagnostic hooks, including encoded and truncated forms. Response snippets in Test Request and dry-run errors are masked before they are cut, so a credential crossing the 2,000-byte limit is never partly shown. History and log entries are also masked when read.
+- **Per-post authorization.** Runs act as an explicit account (the initiator for manual runs and their background continuations; the user who last saved or enabled the preset for scheduled runs), re-checked every step. Adopting, updating, restoring, re-authoring, or publishing an existing post requires that account's object-level permissions for the post.
+- **Maximum records per run is a hard limit**, enforced before records are buffered, with or without pagination, and again before each record, so a run buffered by 1.0.5 and resumed after upgrading also stops at the limit.
+- **Update URI header and update source isolation** for GitHub updates.
+- **Shortcodes and blocks in imported content** are neutralized by default for new presets, with an allowlist and a trusted-source option; existing presets keep their behavior until changed. Neutralize converts every `[`, and the allowlist compares complete shortcode names as WordPress reads them. Preset files exported by 1.0.5 and earlier still import, with *Neutralize*.
 
 ### 1.0.5
 

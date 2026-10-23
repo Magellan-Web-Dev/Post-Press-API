@@ -17,8 +17,9 @@ use PostPressAPI\Support\Redactor;
  *
  * Both work on unsaved editor settings and either fetch the first page from the
  * API or use pasted sample JSON. Neither writes anything: no posts, meta,
- * attachments, tracking state, run state, or history. Output is bounded and
- * redacted.
+ * attachments, tracking state, run state, or history. Output is bounded, and
+ * every response — successful or failed — is redacted as a whole before it is
+ * returned, so no error path can bypass masking.
  */
 final class PreviewService
 {
@@ -52,13 +53,43 @@ final class PreviewService
      * @param array<string, mixed> $preset      Normalized, validated preset (may be unsaved).
      * @param string|null          $secret      Credential allowed for this origin.
      * @param string|null          $sample_json Pasted JSON, used instead of the API when given.
+     * @param Redactor|null        $redactor    Redactor for other known credentials (such as the saved one).
      *
      * @return array<string, mixed>
      */
-    public function test_request(array $preset, ?string $secret, ?string $sample_json): array
+    public function test_request(array $preset, ?string $secret, ?string $sample_json, ?Redactor $redactor = null): array
     {
-        $redactor = new Redactor($secret === null ? [] : [$secret]);
-        $loaded   = $this->load($preset, $secret, $sample_json, $redactor);
+        $redactor = $this->redactor($preset, $secret, $redactor);
+
+        return $redactor->data($this->describe($preset, $secret, $sample_json, $redactor));
+    }
+
+    /**
+     * Evaluates mappings, matching, and change detection for the first records,
+     * exactly as a run would, but without writing anything.
+     *
+     * @param array<string, mixed> $preset      Normalized, validated preset (may be unsaved).
+     * @param string|null          $secret      Credential allowed for this origin.
+     * @param string|null          $sample_json Pasted JSON, used instead of the API when given.
+     * @param Redactor|null        $redactor    Redactor for other known credentials (such as the saved one).
+     *
+     * @return array<string, mixed>
+     */
+    public function dry_run(array $preset, ?string $secret, ?string $sample_json, ?Redactor $redactor = null): array
+    {
+        $redactor = $this->redactor($preset, $secret, $redactor);
+
+        return $redactor->data($this->evaluate($preset, $secret, $sample_json, $redactor));
+    }
+
+    /**
+     * Test Request body (redacted by the caller).
+     *
+     * @return array<string, mixed>
+     */
+    private function describe(array $preset, ?string $secret, ?string $sample_json, Redactor $redactor): array
+    {
+        $loaded = $this->load($preset, $secret, $sample_json);
 
         if (!$loaded['ok']) {
             return $loaded;
@@ -80,13 +111,13 @@ final class PreviewService
 
         if ($preset['response']['records_path'] === '') {
             $output['records_error'] = __('Enter a records path to see the records and their fields. Suggestions are listed under Response paths.', 'post-press-api');
-            return $this->redact($output, $redactor);
+            return $output;
         }
 
         $read = $this->reader->records($data, $preset);
         if (!$read['ok']) {
             $output['records_error'] = $read['error'];
-            return $this->redact($output, $redactor);
+            return $output;
         }
 
         $records = $read['records'];
@@ -100,23 +131,17 @@ final class PreviewService
         $output['record_paths'] = $this->discovery->discover_records($records, self::DISCOVERY_RECORDS);
         $output['samples']      = $samples;
 
-        return $this->redact($output, $redactor);
+        return $output;
     }
 
     /**
-     * Evaluates mappings, matching, and change detection for the first records,
-     * exactly as a run would, but without writing anything.
-     *
-     * @param array<string, mixed> $preset      Normalized, validated preset (may be unsaved).
-     * @param string|null          $secret      Credential allowed for this origin.
-     * @param string|null          $sample_json Pasted JSON, used instead of the API when given.
+     * Dry run body (redacted by the caller).
      *
      * @return array<string, mixed>
      */
-    public function dry_run(array $preset, ?string $secret, ?string $sample_json): array
+    private function evaluate(array $preset, ?string $secret, ?string $sample_json, Redactor $redactor): array
     {
-        $redactor = new Redactor($secret === null ? [] : [$secret]);
-        $loaded   = $this->load($preset, $secret, $sample_json, $redactor);
+        $loaded = $this->load($preset, $secret, $sample_json);
 
         if (!$loaded['ok']) {
             return $loaded;
@@ -138,7 +163,9 @@ final class PreviewService
             wp_timezone(),
             Fingerprint::mapping_hash($preset),
             '',
-            true
+            true,
+            false,
+            get_current_user_id()
         );
 
         $records  = $read['records'];
@@ -148,7 +175,7 @@ final class PreviewService
         foreach (array_slice($records, 0, self::DRY_RUN_RECORDS) as $index => $record) {
             $outcome = $this->processor->process($record, $index + 1, $context);
             $counts[$outcome->action]++;
-            $outcomes[] = $this->redact($outcome->to_array(true), $redactor);
+            $outcomes[] = $outcome->redact($redactor)->to_array(true);
         }
 
         return [
@@ -175,11 +202,10 @@ final class PreviewService
      * @param array<string, mixed> $preset      Preset.
      * @param string|null          $secret      Credential.
      * @param string|null          $sample_json Pasted JSON.
-     * @param Redactor             $redactor    Redactor.
      *
      * @return array{ok: bool, source: string, http: array<string, mixed>|null, data?: mixed, error?: string, snippet?: string}
      */
-    private function load(array $preset, ?string $secret, ?string $sample_json, Redactor $redactor): array
+    private function load(array $preset, ?string $secret, ?string $sample_json): array
     {
         if ($sample_json !== null) {
             $text = trim($sample_json);
@@ -217,7 +243,7 @@ final class PreviewService
                 'source'  => 'api',
                 'http'    => $result->summary(),
                 'error'   => $result->error,
-                'snippet' => $redactor->text($result->snippet),
+                'snippet' => $result->snippet,
             ];
         }
 
@@ -225,7 +251,8 @@ final class PreviewService
     }
 
     /**
-     * Pretty-printed, bounded, redacted JSON.
+     * Pretty-printed, redacted, bounded JSON. Masking happens before truncation
+     * so a credential at the cut cannot be left partly visible.
      *
      * @param mixed    $value    Value.
      * @param int      $limit    Characters.
@@ -235,31 +262,29 @@ final class PreviewService
      */
     private function pretty(mixed $value, int $limit, Redactor $redactor): string
     {
-        $json = (string) wp_json_encode($value, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
+        $json = $redactor->text((string) wp_json_encode($value, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR));
         if (ValueInspector::length($json) > $limit) {
             $json = ValueInspector::substr($json, 0, $limit) . "\n…";
         }
 
-        return $redactor->text($json);
+        return $json;
     }
 
     /**
-     * Masks secrets anywhere in a response array (previews, discovered path
-     * examples, mapping details), in case the API echoes a credential back.
+     * Redactor for the credential in use, credential-like request values, and any caller-supplied secrets.
      *
-     * @param array<string, mixed> $data     Response data.
-     * @param Redactor             $redactor Redactor.
+     * @param array<string, mixed> $preset Preset.
+     * @param string|null          $secret Credential in use.
+     * @param Redactor|null        $extra  Caller's redactor.
      *
-     * @return array<string, mixed>
+     * @return Redactor
      */
-    private function redact(array $data, Redactor $redactor): array
+    private function redactor(array $preset, ?string $secret, ?Redactor $extra): Redactor
     {
-        array_walk_recursive($data, static function (&$value) use ($redactor): void {
-            if (is_string($value)) {
-                $value = $redactor->text($value);
-            }
-        });
+        $redactor = $extra === null ? new Redactor() : clone $extra;
+        $redactor->add_secret($secret);
+        $redactor->add_preset($preset);
 
-        return $data;
+        return $redactor;
     }
 }

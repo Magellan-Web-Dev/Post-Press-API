@@ -11,6 +11,7 @@ use PostPressAPI\Mapping\CoreFields;
 use PostPressAPI\Mapping\Destination;
 use PostPressAPI\Mapping\DestinationRegistry;
 use PostPressAPI\Mapping\MappingValidator;
+use PostPressAPI\Mapping\MarkupPolicy;
 use PostPressAPI\Mapping\PathResolver;
 use PostPressAPI\Support\Permissions;
 
@@ -69,6 +70,7 @@ final class PresetValidator
         $secret = $this->validate_secret($preset, $existing, $secret, $origin, $add);
         $this->validate_response($preset, $add);
         $this->validate_destination($preset, $add, $warnings, $check_permissions);
+        $this->validate_markup($raw, $preset, $add, $warnings);
         $this->validate_sync($preset, $add);
         $this->validate_pagination($preset, $add);
 
@@ -430,6 +432,47 @@ final class PresetValidator
         }
         foreach ($result['warnings'] as $warning) {
             $warnings[] = $warning;
+        }
+    }
+
+    /**
+     * Validates the shortcode and block policy for imported rich text.
+     *
+     * @param array<string, mixed> $raw      Raw data.
+     * @param array<string, mixed> $preset   Normalized preset.
+     * @param list<string>         $warnings Warning accumulator.
+     */
+    private function validate_markup(array $raw, array $preset, callable $add, array &$warnings): void
+    {
+        $destination = $preset['destination'];
+
+        if ($destination['markup'] === MarkupPolicy::ALLOWLIST) {
+            $submitted = $raw['destination']['shortcodes'] ?? [];
+            $submitted = is_string($submitted) ? (preg_split('/[\s,]+/', $submitted) ?: []) : (array) $submitted;
+            foreach ($submitted as $tag) {
+                $tag = is_string($tag) ? trim($tag, " \t\n\r\0\x0B[]") : '';
+                if ($tag !== '' && preg_match(MarkupPolicy::TAG_PATTERN, $tag) !== 1) {
+                    $add('destination.markup', sprintf(
+                        /* translators: %s: shortcode tag. */
+                        __('"%s" is not a valid shortcode name (letters, numbers, - and _).', 'post-press-api'),
+                        $tag
+                    ));
+                }
+            }
+            if (count(array_filter($submitted, static fn ($tag): bool => is_string($tag) && trim($tag) !== '')) > MarkupPolicy::MAX_TAGS) {
+                $add('destination.markup', sprintf(
+                    /* translators: %d: maximum number of shortcodes. */
+                    __('List at most %d shortcodes.', 'post-press-api'),
+                    MarkupPolicy::MAX_TAGS
+                ));
+            }
+            if ($destination['shortcodes'] === []) {
+                $add('destination.markup', __('List the shortcodes imported content may use, or choose another setting.', 'post-press-api'));
+            }
+        }
+
+        if ($destination['markup'] === MarkupPolicy::TRUSTED) {
+            $warnings[] = __('Imported content may run any shortcode or block installed on this site. Choose "Trusted source" only for APIs whose content you control.', 'post-press-api');
         }
     }
 

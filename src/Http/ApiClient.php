@@ -13,10 +13,13 @@ use PostPressAPI\Support\Redactor;
 /**
  * Fetches and decodes one page of JSON from a preset's endpoint.
  *
- * - Uses wp_safe_remote_request(), which rejects private/local addresses.
- * - Follows at most three redirects itself. When a credential is configured,
- *   redirects to a different origin (scheme, host, or port) are refused, so
- *   credentials are never forwarded to another host.
+ * - Uses wp_safe_remote_request(), which rejects private/local addresses, with
+ *   TLS verification on; every hop is re-validated.
+ * - Follows at most three redirects itself, and only within the endpoint's
+ *   origin (scheme, host, and effective port). A redirect to another origin —
+ *   including an https:// to http:// downgrade — is refused for every
+ *   authentication mode, because custom headers, query parameters, and POST
+ *   bodies may be as sensitive as a dedicated credential.
  * - Enforces the configured response size; a body that reaches the limit is
  *   reported as an error instead of being parsed as if complete.
  * - Decodes JSON with big integers kept as strings, so long numeric IDs are
@@ -51,7 +54,8 @@ final class ApiClient
      */
     public function fetch(array $preset, ?string $secret, array $page_params = []): FetchResult
     {
-        $redactor = new Redactor($secret === null ? [] : [$secret]);
+        $redactor = new Redactor([$secret]);
+        $redactor->add_preset($preset);
         $built    = $this->builder->build($preset, $secret, $page_params);
         $url      = $built['url'];
         $args     = $built['args'];
@@ -109,14 +113,10 @@ final class ApiClient
                 return FetchResult::failure('bad_redirect', __('The API sent a redirect without a valid http(s) location.', 'post-press-api'), false, $status, null, 0, $this->elapsed($started), '', '', Redactor::url($url));
             }
 
-            if ($secret !== null && Url::origin($next) !== $origin) {
+            if (Url::origin($next) !== $origin) {
                 return FetchResult::failure(
                     'redirect_blocked',
-                    sprintf(
-                        /* translators: %s: redirect target without query string. */
-                        __('The API redirected to a different host (%s). Credentials are never forwarded to another host; update the endpoint URL instead.', 'post-press-api'),
-                        Redactor::url($next)
-                    ),
+                    $this->redirect_error($origin, $next, $redactor),
                     false,
                     $status,
                     null,
@@ -143,7 +143,7 @@ final class ApiClient
         $body         = (string) wp_remote_retrieve_body($response);
         $bytes        = strlen($body);
         $content_type = $this->header($response, 'content-type');
-        $snippet      = $redactor->text($this->snippet($body));
+        $snippet      = $this->snippet($body, $redactor);
         $final_url    = Redactor::url($url);
         $duration     = $this->elapsed($started);
 
@@ -156,7 +156,7 @@ final class ApiClient
                     /* translators: 1: HTTP status code, 2: reason phrase. */
                     __('The API responded with HTTP %1$d %2$s.', 'post-press-api'),
                     $status,
-                    $message
+                    $redactor->text($message)
                 ),
                 in_array($status, self::RETRYABLE_STATUSES, true),
                 $status,
@@ -252,6 +252,35 @@ final class ApiClient
     }
 
     /**
+     * Explains a refused cross-origin redirect without the target's path or query.
+     *
+     * @param string|null $origin   Endpoint origin.
+     * @param string      $next     Redirect target.
+     * @param Redactor    $redactor Redactor.
+     *
+     * @return string
+     */
+    private function redirect_error(?string $origin, string $next, Redactor $redactor): string
+    {
+        $parts  = (array) wp_parse_url($next);
+        $target = $redactor->text(strtolower((string) ($parts['scheme'] ?? '')) . '://' . strtolower((string) ($parts['host'] ?? '')) . (isset($parts['port']) ? ':' . (int) $parts['port'] : ''));
+
+        if ($origin !== null && str_starts_with($origin, 'https://') && str_starts_with((string) Url::origin($next), 'http://')) {
+            return sprintf(
+                /* translators: %s: redirect target origin. */
+                __('The API redirected from https:// to an insecure http:// address (%s), so the request was stopped. Nothing from the request was sent there.', 'post-press-api'),
+                $target
+            );
+        }
+
+        return sprintf(
+            /* translators: %s: redirect target origin. */
+            __('The API redirected to a different host, scheme, or port (%s), so the request was stopped. Headers, credentials, and request bodies are never forwarded to another origin; if the new address is correct, use it as the endpoint URL.', 'post-press-api'),
+            $target
+        );
+    }
+
+    /**
      * Reads a response header as a string.
      *
      * @param array<string, mixed> $response Response.
@@ -270,15 +299,17 @@ final class ApiClient
     }
 
     /**
-     * Bounded, valid-UTF-8 start of a body.
+     * Bounded, redacted, valid-UTF-8 start of a body. Masking happens before the
+     * cut, so a credential at the cut cannot be left partly visible.
      *
-     * @param string $body Body.
+     * @param string   $body     Body.
+     * @param Redactor $redactor Redactor.
      *
      * @return string
      */
-    private function snippet(string $body): string
+    private function snippet(string $body, Redactor $redactor): string
     {
-        $snippet = substr($body, 0, self::SNIPPET_LENGTH);
+        $snippet = $redactor->excerpt($body, self::SNIPPET_LENGTH);
         if (function_exists('wp_check_invalid_utf8')) {
             $snippet = wp_check_invalid_utf8($snippet, true);
         }

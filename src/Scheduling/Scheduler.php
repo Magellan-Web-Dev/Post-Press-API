@@ -20,6 +20,11 @@ use PostPressAPI\Sync\ImportRunner;
  * disabling or deleting a preset removes its scheduled and continuation events;
  * deactivation removes all plugin events; activation restores them.
  *
+ * Scheduled runs and continuations never act as whichever user happens to
+ * trigger WP-Cron: {@see ImportRunner} switches every step to the run's account
+ * (for scheduled runs, the user who last saved or enabled the preset) and
+ * restores the previous user afterwards.
+ *
  * WP-Cron only runs when the site receives traffic. For dependable timing,
  * define DISABLE_WP_CRON and have the server call wp-cron.php (or
  * `wp cron event run --due-now`) every few minutes.

@@ -12,8 +12,9 @@ use PostPressAPI\Presets\PresetSchema;
  * Builds the outbound request for a preset and page.
  *
  * Redirects are disabled at the transport level ("redirection" => 0) so
- * {@see ApiClient} can follow them itself and refuse to carry credentials to
- * another origin. TLS verification stays on.
+ * {@see ApiClient} can follow them itself and refuse to carry the request —
+ * credentials, custom headers, query parameters, or body — to another origin.
+ * TLS verification stays on.
  */
 final class RequestBuilder
 {

@@ -27,6 +27,7 @@ use PostPressAPI\Presets\SecretStore;
 use PostPressAPI\Scheduling\ContinuationScheduler;
 use PostPressAPI\Scheduling\Scheduler;
 use PostPressAPI\Support\Clock;
+use PostPressAPI\Support\Redactor;
 use PostPressAPI\Sync\IdentityResolver;
 use PostPressAPI\Sync\ImportRunner;
 use PostPressAPI\Sync\Pagination;
@@ -173,7 +174,7 @@ final class Services
 
     public function runs(): RunRepository
     {
-        return $this->get(RunRepository::class, static fn () => new RunRepository());
+        return $this->get(RunRepository::class, fn () => new RunRepository($this->secrets()));
     }
 
     public function lock(): RunLock
@@ -183,7 +184,15 @@ final class Services
 
     public function logger(): Logger
     {
-        return $this->get(Logger::class, fn () => new Logger($this->clock));
+        return $this->get(Logger::class, fn () => new Logger($this->clock, function (): array {
+            // Every saved credential and credential-like request value is masked in the log.
+            $secrets = [];
+            foreach ($this->presets()->all() as $preset) {
+                $secrets[] = $this->secrets()->get((string) $preset['id'])['value'] ?? null;
+                array_push($secrets, ...Redactor::preset_values($preset));
+            }
+            return $secrets;
+        }));
     }
 
     public function continuations(): ContinuationScheduler

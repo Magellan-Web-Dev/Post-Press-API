@@ -7,6 +7,7 @@ namespace PostPressAPI\Presets;
 if (!defined('ABSPATH')) exit;
 
 use PostPressAPI\Mapping\MappingSchema;
+use PostPressAPI\Mapping\MarkupPolicy;
 
 /**
  * Structure, defaults, and bounds of a request preset.
@@ -130,9 +131,11 @@ final class PresetSchema
                 'identity'      => ['mode' => self::IDENTITY_PATH, 'path' => 'id', 'paths' => []],
             ],
             'destination' => [
-                'post_type' => '',
-                'status'    => 'draft',
-                'author'    => 0,
+                'post_type'  => '',
+                'status'     => 'draft',
+                'author'     => 0,
+                'markup'     => MarkupPolicy::NEUTRALIZE,
+                'shortcodes' => [],
             ],
             'mappings'    => [],
             'sync'        => [
@@ -241,9 +244,11 @@ final class PresetSchema
                 ],
             ],
             'destination' => [
-                'post_type' => sanitize_key(self::str($dest['post_type'] ?? '', 20)),
-                'status'    => sanitize_key(self::str($dest['status'] ?? 'draft', 20)),
-                'author'    => max(0, (int) ($dest['author'] ?? 0)),
+                'post_type'  => sanitize_key(self::str($dest['post_type'] ?? '', 20)),
+                'status'     => sanitize_key(self::str($dest['status'] ?? 'draft', 20)),
+                'author'     => max(0, (int) ($dest['author'] ?? 0)),
+                'markup'     => self::choice(self::str($dest['markup'] ?? '', 20), MarkupPolicy::MODES, MarkupPolicy::NEUTRALIZE),
+                'shortcodes' => MarkupPolicy::tags($dest['shortcodes'] ?? []),
             ],
             'mappings'    => MappingSchema::normalize_rows($data['mappings'] ?? []),
             'sync'        => [

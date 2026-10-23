@@ -7,6 +7,7 @@ namespace PostPressAPI\Sync;
 if (!defined('ABSPATH')) exit;
 
 use PostPressAPI\Presets\PresetRepository;
+use PostPressAPI\Presets\SecretStore;
 
 /**
  * Persists run progress and bounded run history (all non-autoloaded options).
@@ -15,6 +16,9 @@ use PostPressAPI\Presets\PresetRepository;
  *   ppapi_runbuf_{id}     records of the page currently being processed
  *   ppapi_runcancel_{id}  cancellation request for a step running elsewhere
  *   ppapi_history_{id}    the last 25 finished runs
+ *
+ * History entries are diagnostics: the preset's saved credential is masked when
+ * an entry is written and again when history is read.
  */
 final class RunRepository
 {
@@ -25,6 +29,10 @@ final class RunRepository
 
     /** @var int Runs kept per preset. */
     public const HISTORY_LIMIT = 25;
+
+    public function __construct(private readonly ?SecretStore $secrets = null)
+    {
+    }
 
     /**
      * Active (or last unfinished) run state.
@@ -131,7 +139,7 @@ final class RunRepository
         wp_cache_delete(self::HISTORY_PREFIX . $preset_id, 'options');
         $history = get_option(self::HISTORY_PREFIX . $preset_id, []);
 
-        return is_array($history) ? array_values(array_filter($history, 'is_array')) : [];
+        return is_array($history) ? $this->redact($preset_id, array_values(array_filter($history, 'is_array'))) : [];
     }
 
     /**
@@ -157,6 +165,7 @@ final class RunRepository
         if (!PresetRepository::is_valid_id($preset_id)) {
             throw new \InvalidArgumentException('Invalid preset ID.');
         }
+        $entry = $this->redact($preset_id, $entry);
         \PostPressAPI\Support\AtomicOption::update(self::HISTORY_PREFIX . $preset_id, static function (array $history) use ($entry): array {
             // A retried finish must not duplicate the same run.
             $history = array_values(array_filter($history, static fn ($run): bool => is_array($run) && ($run['run_id'] ?? '') !== ($entry['run_id'] ?? null)));
@@ -215,5 +224,18 @@ final class RunRepository
         $this->clear_active($preset_id);
         $this->clear_cancel($preset_id);
         delete_option(self::HISTORY_PREFIX . $preset_id);
+    }
+
+    /**
+     * Masks the preset's saved credential in history data.
+     *
+     * @param string       $preset_id Preset ID.
+     * @param array<mixed> $data      History entry or entries.
+     *
+     * @return array<mixed>
+     */
+    private function redact(string $preset_id, array $data): array
+    {
+        return $this->secrets === null ? $data : $this->secrets->redactor([$preset_id])->data($data);
     }
 }

@@ -12,6 +12,7 @@ use PostPressAPI\Admin\Notices;
 use PostPressAPI\Http\Url;
 use PostPressAPI\Mapping\MappingCondition;
 use PostPressAPI\Mapping\MappingSchema;
+use PostPressAPI\Mapping\MarkupPolicy;
 use PostPressAPI\Mapping\Transformer;
 use PostPressAPI\Presets\PresetSchema;
 use PostPressAPI\REST\RestController;
@@ -447,6 +448,25 @@ final class EditorView
                         ?>
                     </td>
                 </tr>
+                <tr>
+                    <th scope="row"><label for="ppapi-markup"><?php esc_html_e('Shortcodes and blocks in imported content', 'post-press-api'); ?></label></th>
+                    <td>
+                        <select id="ppapi-markup" name="ppapi[destination][markup]" aria-describedby="ppapi-markup-help"<?php $this->invalid('destination.markup', 'ppapi-markup'); ?>>
+                            <option value="<?php echo esc_attr(MarkupPolicy::NEUTRALIZE); ?>" <?php selected($destination['markup'], MarkupPolicy::NEUTRALIZE); ?>><?php esc_html_e('Neutralize (recommended)', 'post-press-api'); ?></option>
+                            <option value="<?php echo esc_attr(MarkupPolicy::ALLOWLIST); ?>" <?php selected($destination['markup'], MarkupPolicy::ALLOWLIST); ?>><?php esc_html_e('Allow only listed shortcodes', 'post-press-api'); ?></option>
+                            <option value="<?php echo esc_attr(MarkupPolicy::TRUSTED); ?>" <?php selected($destination['markup'], MarkupPolicy::TRUSTED); ?>><?php esc_html_e('Trusted source: keep all shortcodes and blocks', 'post-press-api'); ?></option>
+                        </select>
+                        <span data-ppapi-show-for="#ppapi-markup" data-ppapi-show-values="allowlist">
+                            <label for="ppapi-shortcodes" class="screen-reader-text"><?php esc_html_e('Allowed shortcodes', 'post-press-api'); ?></label>
+                            <input type="text" class="regular-text" id="ppapi-shortcodes" name="ppapi[destination][shortcodes]" value="<?php echo esc_attr(implode(', ', (array) $destination['shortcodes'])); ?>" placeholder="<?php esc_attr_e('gallery, caption', 'post-press-api'); ?>">
+                        </span>
+                        <p class="description" id="ppapi-markup-help"><?php esc_html_e('Applies to post content, excerpts, and ACF WYSIWYG fields. HTML filtering keeps [shortcodes] and block markup, which run whatever matching code is installed when the post is displayed. Neutralize shows shortcodes as plain text and imports blocks as plain HTML. A new setting applies from the next run: posts whose imported content contains shortcodes or block markup are then updated with the new handling; other posts are not touched.', 'post-press-api'); ?></p>
+                        <?php if ($destination['markup'] === MarkupPolicy::TRUSTED) : ?>
+                            <p class="description"><strong><?php esc_html_e('Imported content may run any shortcode or block installed on this site. Presets saved before this setting existed use this mode until you choose another.', 'post-press-api'); ?></strong></p>
+                        <?php endif; ?>
+                        <?php $this->field_errors('destination.markup', 'ppapi-markup'); ?>
+                    </td>
+                </tr>
             </table>
 
             <h3><?php esc_html_e('Mappings', 'post-press-api'); ?></h3>
@@ -635,6 +655,16 @@ final class EditorView
                             } else {
                                 esc_html_e('Not currently scheduled. Save the preset to schedule it.', 'post-press-api');
                             }
+                            ?>
+                        </p>
+                        <p class="description">
+                            <?php
+                            $account = $is_new ? wp_get_current_user() : get_userdata(ImportRunner::scheduled_account($preset));
+                            printf(
+                                /* translators: %s: user display name. */
+                                esc_html__('Scheduled runs act as %s — the user who last saved or enabled this preset — and can only change posts that account may edit. Saving the preset makes your account the scheduled account.', 'post-press-api'),
+                                $account instanceof \WP_User && $account->exists() ? esc_html($account->display_name) : esc_html__('no existing user (save the preset to assign your account)', 'post-press-api')
+                            );
                             ?>
                         </p>
                         <p class="description"><?php esc_html_e('WP-Cron only runs when the site receives visits, so times are approximate. For dependable timing, set DISABLE_WP_CRON in wp-config.php and have the server call wp-cron.php (or run "wp cron event run --due-now") every few minutes.', 'post-press-api'); ?></p>

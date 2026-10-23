@@ -1,5 +1,5 @@
-# Ignore tests folder
-/tests/
-
 # Ignore build folder
 /build/
+
+# macOS metadata
+.DS_Store

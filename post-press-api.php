@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Post Press API
  * Description:       Fetch JSON records from external APIs manually or on a schedule and map them into posts, custom post types, post meta, and Advanced Custom Fields.
- * Version:           1.0.5
+ * Version:           1.0.6
  * Author:            Chris Paschall
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
@@ -10,6 +10,7 @@
  * Domain Path:       /languages
  * Requires at least: 6.0
  * Requires PHP:      8.1
+ * Update URI:        https://github.com/Magellan-Web-Dev/Post-Press-API
  *
  * Flow overview:
  *  1. Administrators create request presets under Post Press API (Admin\AdminPage). Each preset stores
@@ -53,7 +54,7 @@ if (version_compare(PHP_VERSION, '8.1', '<')) {
 } else {
 
     /** @var string Plugin version. */
-    define('PPAPI_VERSION', '1.0.5');
+    define('PPAPI_VERSION', '1.0.6');
 
     /** @var string Absolute path to the main plugin file. */
     define('PPAPI_FILE', __FILE__);

@@ -57,4 +57,13 @@ mkdir -p "$BUILD_DIR"
 rm -f "$ZIP_PATH"
 (cd "$staging" && zip -rqX "$ZIP_PATH" "$SLUG")
 
+# Release packages must never contain tests or other development files.
+# (The listing is read in full first: with pipefail, grep -q could stop unzip early and hide a match.)
+contents="$(unzip -Z1 "$ZIP_PATH")"
+if grep -Eq "^$SLUG/(tests|build)/|^$SLUG/(build\.sh|\.git.*)$|(^|/)\.DS_Store$" <<<"$contents"; then
+    rm -f "$ZIP_PATH"
+    echo "Error: development files were found in the package; nothing was built." >&2
+    exit 1
+fi
+
 echo "Built $ZIP_PATH"

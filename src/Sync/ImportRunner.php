@@ -43,6 +43,24 @@ use PostPressAPI\Support\Redactor;
  * Retry-After value; the wait is persisted (status "waiting"), never slept.
  * A run ends as completed, completed_with_errors, truncated (stopped early, more
  * records remain), failed, or cancelled — partial runs are never reported as complete.
+ *
+ * Execution account: every run acts as one explicit user, stored in the run
+ * state as run_as — the user who started a manual run, or for scheduled runs
+ * the user who last saved or enabled the preset ({@see scheduled_account()}).
+ * Each step (including WP-Cron continuations) switches to that user, rechecks
+ * the account still exists and holds the post type's capabilities, and
+ * restores the previous user afterwards. Changes to individual posts are
+ * authorized against the same account ({@see RecordProcessor}).
+ *
+ * Record limit: max_records is a hard limit for the whole run. Records beyond
+ * the remaining allowance are dropped from the page before it is buffered, even
+ * when pagination is off, the API ignores the page size, or it reports no more
+ * pages; the run then ends as truncated. The limit is checked again before each
+ * buffered record, so a run buffered by an earlier version also stops there.
+ *
+ * Diagnostics: messages and failed-record details are masked with the preset's
+ * saved credential and credential-like request values before they are stored in
+ * run state or history, logged, returned, or passed to ppapi_run_finished.
  */
 final class ImportRunner
 {
@@ -116,6 +134,12 @@ final class ImportRunner
             return new \WP_Error('ppapi_not_ready', __('The preset is not ready to run:', 'post-press-api') . ' ' . implode(' ', $problems), ['status' => 409]);
         }
 
+        $run_as   = $trigger === self::TRIGGER_SCHEDULE ? self::scheduled_account($preset) : get_current_user_id();
+        $problems = $this->account_problems($preset, $run_as, $trigger);
+        if ($problems !== []) {
+            return new \WP_Error('ppapi_forbidden', implode(' ', $problems), ['status' => 403]);
+        }
+
         $token = $this->lock->acquire($preset_id);
         if ($token === null) {
             return new \WP_Error('ppapi_running', __('A run of this preset is already in progress.', 'post-press-api'), ['status' => 409]);
@@ -131,7 +155,7 @@ final class ImportRunner
             }
 
             $this->runs->clear_cancel($preset_id);
-            $state = $this->new_state($preset, $trigger, $force);
+            $state = $this->new_state($preset, $trigger, $force, $run_as);
             $this->runs->save_buffer($preset_id, []);
             $this->runs->save_active($state);
         } finally {
@@ -169,16 +193,13 @@ final class ImportRunner
                 return ['state' => $state, 'busy' => false];
             }
 
-            $state = $this->advance($state, $this->effective_budget($budget));
+            $state = $this->advance_as($state, $this->effective_budget($budget));
         } catch (\Throwable $e) {
             if (is_array($state) && in_array($state['status'] ?? '', self::ACTIVE, true)) {
-                $redactor = new Redactor();
-                $secret   = $this->secrets->get($preset_id);
-                $redactor->add_secret($secret['value'] ?? null);
                 $state = $this->finish($state, self::STATUS_FAILED, sprintf(
                     /* translators: %s: error message. */
                     __('The run stopped because of an unexpected error: %s', 'post-press-api'),
-                    $redactor->text($e->getMessage())
+                    $this->redactor($state)->text($e->getMessage())
                 ));
             }
         } finally {
@@ -257,7 +278,8 @@ final class ImportRunner
      */
     public function record_failed_start(string $preset_id, string $trigger, string $message): void
     {
-        $now = $this->clock->now();
+        $now     = $this->clock->now();
+        $message = $this->secrets->redactor([$preset_id])->text($message);
         $this->runs->add_history($preset_id, [
             'run_id'         => wp_generate_uuid4(),
             'preset_id'      => $preset_id,
@@ -315,6 +337,64 @@ final class ImportRunner
     }
 
     /**
+     * {@see summary()} with credentials masked, for REST responses.
+     *
+     * @param array<string, mixed> $state Run state or history entry.
+     *
+     * @return array<string, mixed>
+     */
+    public function public_summary(array $state): array
+    {
+        return $this->redactor($state)->data(self::summary($state));
+    }
+
+    /**
+     * Account a scheduled run of this preset acts as: the user who last saved or
+     * enabled it (every save and enable checks that user's capabilities). The
+     * same rule applies to presets saved by earlier versions. 0 when unknown.
+     *
+     * @param array<string, mixed> $preset Preset.
+     *
+     * @return int
+     */
+    public static function scheduled_account(array $preset): int
+    {
+        return max(0, (int) ($preset['updated_by'] ?? 0));
+    }
+
+    /**
+     * Steps the run as its account, restoring the previous user afterwards.
+     *
+     * WP-Cron may run inside any visitor's request; a run never acts as that visitor.
+     *
+     * @param array<string, mixed> $state  Run state.
+     * @param float                $budget Seconds.
+     *
+     * @return array<string, mixed>
+     */
+    private function advance_as(array $state, float $budget): array
+    {
+        $run_as   = $this->run_account($state);
+        $previous = get_current_user_id();
+        $user     = $run_as > 0 ? get_userdata($run_as) : false;
+
+        if (!$user instanceof \WP_User || !$user->exists()) {
+            return $this->finish($state, self::STATUS_FAILED, implode(' ', $this->account_problems((array) $state['snapshot'], $run_as, (string) $state['trigger'])));
+        }
+
+        if ($previous !== $run_as) {
+            wp_set_current_user($run_as);
+        }
+        try {
+            return $this->advance($state, $budget);
+        } finally {
+            if (get_current_user_id() !== $previous) {
+                wp_set_current_user($previous);
+            }
+        }
+    }
+
+    /**
      * Processes records and fetches pages until the batch, page, or time budget is used.
      *
      * @param array<string, mixed> $state  Run state.
@@ -337,6 +417,11 @@ final class ImportRunner
             return $this->finish($state, self::STATUS_CANCELLED, __('The preset was deleted during the run.', 'post-press-api'));
         }
 
+        $problems = $this->account_problems($preset, $this->run_account($state), (string) $state['trigger']);
+        if ($problems !== []) {
+            return $this->finish($state, self::STATUS_FAILED, implode(' ', $problems));
+        }
+
         while (true) {
             $reason = $this->runs->cancel_reason($preset_id);
             if ($reason !== null) {
@@ -350,6 +435,12 @@ final class ImportRunner
             $state['status'] = self::STATUS_RUNNING;
 
             if ((int) $state['buffer_index'] < (int) $state['buffer_size']) {
+                // Pages are cut to the limit before they are buffered, but a run
+                // buffered by an earlier version may still hold more records.
+                if ((int) $state['processed'] >= (int) $preset['pagination']['max_records']) {
+                    return $this->finish($state, self::STATUS_TRUNCATED, $this->pagination->limit_message($preset, (int) $state['buffer_size'] - (int) $state['buffer_index']));
+                }
+
                 if ($processed >= $limit || $this->clock->microtime() >= $deadline) {
                     break;
                 }
@@ -436,14 +527,14 @@ final class ImportRunner
                 $state['resume_at']      = $this->clock->now() + $delay;
                 $state['status']         = self::STATUS_WAITING;
                 $state['updated_at']     = $this->clock->now();
-                $state['message']        = sprintf(
+                $state['message']        = $this->redactor($state)->text(sprintf(
                     /* translators: 1: error, 2: seconds, 3: attempt number, 4: maximum retries. */
                     __('%1$s Retrying in %2$d seconds (retry %3$d of %4$d).', 'post-press-api'),
                     $result->error,
                     $delay,
                     $attempts + 1,
                     $retries
-                );
+                ));
                 $this->runs->save_active($state);
                 $this->logger->warning($state['message'], ['preset_id' => $preset_id, 'run_id' => $state['run_id'], 'http_status' => $result->status, 'url' => $result->url]);
 
@@ -471,8 +562,9 @@ final class ImportRunner
             return $this->finish($state, self::STATUS_FAILED, $read['error']);
         }
 
-        $records = $read['records'];
-        $hash    = sha1((string) wp_json_encode($records));
+        $records   = $read['records'];
+        $hash      = sha1((string) wp_json_encode($records));
+        $allowance = $this->pagination->remaining($preset, (int) $state['fetched']);
 
         $state['pages']   = (int) $state['pages'] + 1;
         $state['fetched'] = (int) $state['fetched'] + count($records);
@@ -480,6 +572,13 @@ final class ImportRunner
         $decision = $this->pagination->after_page($preset, $state['cursor'], $result->data, count($records), $hash, (array) $state['hashes'], (int) $state['pages'], (int) $state['fetched']);
         if ($decision['state'] === Pagination::ERROR) {
             return $this->finish($state, self::STATUS_FAILED, $decision['message']);
+        }
+
+        // Hard per-run limit: excess records are never buffered, so they cause no writes or downloads.
+        $omitted = max(0, count($records) - $allowance);
+        if ($omitted > 0) {
+            $records  = array_slice($records, 0, $allowance);
+            $decision = ['state' => Pagination::TRUNCATED, 'cursor' => $state['cursor'], 'message' => $this->pagination->limit_message($preset, $omitted)];
         }
 
         $state['hashes'] = array_slice([...(array) $state['hashes'], $hash], -self::HASH_MEMORY);
@@ -554,7 +653,8 @@ final class ImportRunner
             Fingerprint::mapping_hash($preset),
             (string) $state['run_id'],
             false,
-            (bool) $state['force']
+            (bool) $state['force'],
+            $this->run_account($state)
         );
     }
 
@@ -595,7 +695,7 @@ final class ImportRunner
 
         if ($outcome->action === RecordOutcome::FAILED) {
             if (count($state['issues']) < self::ISSUE_LIMIT) {
-                $state['issues'][] = $outcome->to_array();
+                $state['issues'][] = $outcome->redact($this->redactor($state))->to_array();
             } else {
                 $state['issue_overflow'] = (int) $state['issue_overflow'] + 1;
             }
@@ -616,15 +716,16 @@ final class ImportRunner
      */
     private function finish(array $state, string $status, string $message, array $context = []): array
     {
-        $now = $this->clock->now();
+        $now      = $this->clock->now();
+        $redactor = $this->redactor($state);
 
         $state['status']      = $status;
-        $state['message']     = $message;
+        $state['message']     = $redactor->text($message);
         $state['finished_at'] = $now;
         $state['updated_at']  = $now;
         $state['resume_at']   = 0;
 
-        $summary   = self::summary($state);
+        $summary   = $redactor->data(self::summary($state));
         $preset_id = (string) $state['preset_id'];
 
         $this->runs->add_history($preset_id, $summary);
@@ -647,8 +748,8 @@ final class ImportRunner
             $counts['unchanged'],
             $counts['skipped'],
             $counts['failed'],
-            $message
-        ), ['preset_id' => $preset_id, 'run_id' => $summary['run_id'], 'trigger' => $summary['trigger']] + $context);
+            $summary['message']
+        ), ['preset_id' => $preset_id, 'run_id' => $summary['run_id'], 'trigger' => $summary['trigger']] + $context, $redactor);
 
         /**
          * Fires when a run finishes (any final status).
@@ -667,10 +768,11 @@ final class ImportRunner
      * @param array<string, mixed> $preset  Preset snapshot.
      * @param string               $trigger Trigger.
      * @param bool                 $force   Ignore fingerprints.
+     * @param int                  $run_as  Account the run acts as.
      *
      * @return array<string, mixed>
      */
-    private function new_state(array $preset, string $trigger, bool $force): array
+    private function new_state(array $preset, string $trigger, bool $force, int $run_as): array
     {
         $now = $this->clock->now();
 
@@ -701,7 +803,79 @@ final class ImportRunner
             'updated_at'     => $now,
             'finished_at'    => 0,
             'started_by'     => get_current_user_id(),
+            'run_as'         => $run_as,
         ];
+    }
+
+    /**
+     * Account a run acts as. Runs started by earlier versions fall back to the
+     * user who started them, or for scheduled runs to the scheduled account.
+     *
+     * @param array<string, mixed> $state Run state.
+     *
+     * @return int
+     */
+    private function run_account(array $state): int
+    {
+        if (isset($state['run_as'])) {
+            return (int) $state['run_as'];
+        }
+        if ((int) ($state['started_by'] ?? 0) > 0) {
+            return (int) $state['started_by'];
+        }
+
+        return self::scheduled_account((array) ($state['snapshot'] ?? []));
+    }
+
+    /**
+     * Reasons the run's account cannot run this preset (checked at start and every step).
+     *
+     * @param array<string, mixed> $preset  Preset or snapshot.
+     * @param int                  $user_id Account.
+     * @param string               $trigger Trigger.
+     *
+     * @return list<string>
+     */
+    private function account_problems(array $preset, int $user_id, string $trigger): array
+    {
+        if ($user_id <= 0) {
+            return [$trigger === self::TRIGGER_SCHEDULE
+                ? __('Scheduled runs act as the user who last saved or enabled the preset, and none is recorded. Open the preset and save it to run scheduled imports with your account.', 'post-press-api')
+                : __('Runs must be started by a logged-in user.', 'post-press-api')];
+        }
+
+        $problems = Permissions::user_problems(
+            $user_id,
+            (string) $preset['destination']['post_type'],
+            PresetValidator::may_publish($preset),
+            (int) $preset['destination']['author'],
+            \PostPressAPI\Mapping\ImageReference::used($preset['mappings'])
+        );
+
+        if ($problems !== [] && $trigger === self::TRIGGER_SCHEDULE) {
+            $problems[] = __('Scheduled runs act as the user who last saved or enabled the preset; an administrator with the required capabilities can save it to take over.', 'post-press-api');
+        }
+
+        return $problems;
+    }
+
+    /**
+     * Redactor for a run: the preset's saved credential and credential-like request values.
+     *
+     * @param array<string, mixed> $state Run state or history entry.
+     *
+     * @return Redactor
+     */
+    private function redactor(array $state): Redactor
+    {
+        $preset_id = (string) ($state['preset_id'] ?? '');
+        $redactor  = $this->secrets->redactor([$preset_id]);
+        $preset    = is_array($state['snapshot'] ?? null) ? $state['snapshot'] : $this->presets->find($preset_id);
+        if (is_array($preset)) {
+            $redactor->add_preset($preset);
+        }
+
+        return $redactor;
     }
 
     /**

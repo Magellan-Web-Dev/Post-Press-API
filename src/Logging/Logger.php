@@ -12,10 +12,11 @@ use PostPressAPI\Support\Redactor;
 /**
  * Bounded activity log (newest first, at most 200 entries, not autoloaded).
  *
- * Entries hold short messages and identifiers only. Context passes through
- * {@see Redactor}: credential-like keys are dropped, URLs lose their query
- * strings, known secret values are masked, and strings are truncated. Payloads
- * are never logged.
+ * Entries hold short messages and identifiers only. Messages and context pass
+ * through {@see Redactor} before they are stored, handed to the ppapi_log hook,
+ * or read back: credential-like keys are dropped, URLs lose their query strings,
+ * every saved credential (from all presets) is masked, and strings are
+ * truncated only after masking. Payloads are never logged.
  */
 final class Logger
 {
@@ -28,7 +29,11 @@ final class Logger
     public const WARNING = 'warning';
     public const ERROR   = 'error';
 
-    public function __construct(private readonly Clock $clock)
+    /**
+     * @param Clock                                 $clock   Clock.
+     * @param (\Closure(): list<string|null>)|null $secrets Supplies every known credential value.
+     */
+    public function __construct(private readonly Clock $clock, private readonly ?\Closure $secrets = null)
     {
     }
 
@@ -38,13 +43,13 @@ final class Logger
      * @param string               $level     info, warning, or error.
      * @param string               $message   Message.
      * @param array<string, mixed> $context   Identifiers (preset_id, run_id, counts, url…).
-     * @param Redactor|null        $redactor  Redactor aware of secrets in play.
+     * @param Redactor|null        $redactor  Redactor aware of secrets in play; known credentials are always added.
      *
      * @return void
      */
     public function log(string $level, string $message, array $context = [], ?Redactor $redactor = null): void
     {
-        $redactor ??= new Redactor();
+        $redactor = $this->redactor($redactor);
 
         $entries = $this->entries();
         array_unshift($entries, [
@@ -82,19 +87,42 @@ final class Logger
     }
 
     /**
-     * Entries, newest first.
+     * Entries, newest first, masked again on read so entries written before a
+     * credential was known (or by an older version) never display it.
      *
      * @return list<array{time: int, level: string, message: string, context: array<string, mixed>}>
      */
     public function entries(): array
     {
         $entries = get_option(self::OPTION, []);
+        if (!is_array($entries)) {
+            return [];
+        }
 
-        return is_array($entries) ? array_values(array_filter($entries, 'is_array')) : [];
+        return $this->redactor(null)->data(array_values(array_filter($entries, 'is_array')));
     }
 
     public function clear(): void
     {
         delete_option(self::OPTION);
+    }
+
+    /**
+     * Redactor that also masks every known credential.
+     *
+     * @param Redactor|null $redactor Caller's redactor.
+     *
+     * @return Redactor
+     */
+    private function redactor(?Redactor $redactor): Redactor
+    {
+        $redactor = $redactor === null ? new Redactor() : clone $redactor;
+        if ($this->secrets !== null) {
+            foreach (($this->secrets)() as $secret) {
+                $redactor->add_secret($secret);
+            }
+        }
+
+        return $redactor;
     }
 }

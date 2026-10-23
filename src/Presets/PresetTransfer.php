@@ -9,6 +9,7 @@ if (!defined('ABSPATH')) exit;
 use PostPressAPI\Mapping\CoreFields;
 use PostPressAPI\Mapping\Destination;
 use PostPressAPI\Mapping\MappingSchema;
+use PostPressAPI\Mapping\MarkupPolicy;
 use PostPressAPI\Services;
 
 /**
@@ -158,6 +159,9 @@ final class PresetTransfer
         $preset['enabled'] = false;
         $preset['destination']['post_type'] = $post_type ?? $preset['destination']['post_type'];
         $warnings = [__('Imported presets start disabled. Credentials must be re-entered. Existing posts are not migrated or automatically linked to the new preset.', 'post-press-api')];
+        if (self::predates_markup($data['preset']['destination'])) {
+            $warnings[] = __('This file was exported before the shortcode and block setting existed, so the new preset neutralizes shortcodes and block markup in imported content (the default for new presets). If this API\'s content must run them, change "Shortcodes and blocks in imported content" in the editor before enabling the preset.', 'post-press-api');
+        }
         if ($author_id === null) {
             $user = $data['author_login'] === '' ? false : get_user_by('login', $data['author_login']);
             $author_id = $user ? (int) $user->ID : get_current_user_id();
@@ -376,6 +380,10 @@ final class PresetTransfer
     /**
      * Rejects any normalization that would silently lose or reinterpret settings.
      * Older exports may omit the Join date flag or condition object; both default off.
+     * Exports made before the shortcode/block setting existed omit both
+     * destination.markup and destination.shortcodes; they import as Neutralize,
+     * the default for new presets ({@see review()} warns). Unlike stored presets,
+     * which keep Trusted source on upgrade, an import is a new preset under review.
      *
      * @param mixed  $input      Submitted JSON value.
      * @param mixed  $normalized Corresponding normalized value.
@@ -396,6 +404,9 @@ final class PresetTransfer
                 && !array_key_exists('join_datetime', $input) && ($normalized['join_datetime'] ?? null) === false) {
                 $input['join_datetime'] = false;
             }
+            if ($path === 'preset.destination' && self::predates_markup($input)) {
+                $input += ['markup' => MarkupPolicy::NEUTRALIZE, 'shortcodes' => []];
+            }
             if (count($input) !== count($normalized) || array_diff(array_keys($input), array_keys($normalized))) {
                 throw new \InvalidArgumentException(sprintf(__('Missing, unknown, or excessive settings at %s.', 'post-press-api'), $path));
             }
@@ -405,5 +416,18 @@ final class PresetTransfer
         } elseif ($input !== $normalized) {
             throw new \InvalidArgumentException(sprintf(__('Invalid type, unsupported value, or exceeded limit at %s.', 'post-press-api'), $path));
         }
+    }
+
+    /**
+     * Whether exported destination settings predate the shortcode/block setting
+     * (both of its keys are missing; one alone is a malformed file).
+     *
+     * @param array<string, mixed> $destination Exported destination settings.
+     *
+     * @return bool
+     */
+    private static function predates_markup(array $destination): bool
+    {
+        return !array_key_exists('markup', $destination) && !array_key_exists('shortcodes', $destination);
     }
 }

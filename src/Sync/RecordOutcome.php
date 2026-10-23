@@ -38,6 +38,28 @@ final class RecordOutcome
     ) {}
 
     /**
+     * Copy with credentials masked in every diagnostic field.
+     *
+     * Applied before {@see to_array()} truncates the external ID, so a cut-off
+     * credential cannot survive masking.
+     *
+     * @param \PostPressAPI\Support\Redactor $redactor Redactor.
+     *
+     * @return self
+     */
+    public function redact(\PostPressAPI\Support\Redactor $redactor): self
+    {
+        return new self(
+            $this->action,
+            $this->position,
+            $redactor->text($this->external_id),
+            $this->post_id,
+            $redactor->text($this->message),
+            $redactor->data($this->details)
+        );
+    }
+
+    /**
      * Compact array for history issues and REST responses.
      *
      * @param bool $with_details Include mapping details.

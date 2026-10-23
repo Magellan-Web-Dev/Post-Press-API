@@ -21,6 +21,8 @@ final class RunContext
      * @param string               $run_id       Run identifier ('' for dry runs).
      * @param bool                 $dry_run      When true nothing is written.
      * @param bool                 $force        Re-apply mapped values even when fingerprints match.
+     * @param int                  $user_id      Account the run acts as; every change to an existing
+     *                                           post is authorized against this user's capabilities.
      */
     public function __construct(
         public readonly array $preset,
@@ -29,6 +31,7 @@ final class RunContext
         public readonly string $mapping_hash,
         public readonly string $run_id,
         public readonly bool $dry_run,
-        public readonly bool $force = false
+        public readonly bool $force = false,
+        public readonly int $user_id = 0
     ) {}
 }

@@ -23,6 +23,10 @@ use PostPressAPI\Presets\PresetSchema;
  * A page identical to one already seen, or a position that does not advance,
  * stops the run with an error. Reaching the maximum pages/records while more
  * records remain stops the run as "truncated", never as complete.
+ *
+ * The maximum-records limit is also a hard cap on what a run imports: the
+ * runner keeps only {@see remaining()} records of each page, whether or not
+ * pagination is configured or the API honors the requested page size.
  */
 final class Pagination
 {
@@ -178,6 +182,44 @@ final class Pagination
         }
 
         return ['state' => self::CONTINUE, 'cursor' => ['position' => $next], 'message' => ''];
+    }
+
+    /**
+     * Records a run may still import under its maximum-records limit.
+     *
+     * The limit applies to every run, with or without pagination.
+     *
+     * @param array<string, mixed> $preset  Preset.
+     * @param int                  $fetched Records received by earlier pages of this run.
+     *
+     * @return int
+     */
+    public function remaining(array $preset, int $fetched): int
+    {
+        return max(0, (int) $preset['pagination']['max_records'] - $fetched);
+    }
+
+    /**
+     * Explains records dropped because a page went past the maximum-records limit.
+     *
+     * @param array<string, mixed> $preset  Preset.
+     * @param int                  $omitted Records left out.
+     *
+     * @return string
+     */
+    public function limit_message(array $preset, int $omitted): string
+    {
+        return sprintf(
+            /* translators: 1: maximum records per run, 2: records left out. */
+            _n(
+                'Stopped at the limit of %1$d records per run; %2$d more record received from the API was not imported. Raise "Maximum records per run" to import the rest.',
+                'Stopped at the limit of %1$d records per run; %2$d more records received from the API were not imported. Raise "Maximum records per run" to import the rest.',
+                $omitted,
+                'post-press-api'
+            ),
+            (int) $preset['pagination']['max_records'],
+            $omitted
+        );
     }
 
     /**

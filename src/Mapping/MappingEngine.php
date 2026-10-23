@@ -32,6 +32,9 @@ use PostPressAPI\Integration\ACF\AcfNormalizer;
  */
 final class MappingEngine
 {
+    /** @var MarkupPolicy Policy for rich text during the current evaluate() call. */
+    private MarkupPolicy $markup;
+
     public function __construct(
         private readonly PathResolver $paths,
         private readonly Transformer $transformer,
@@ -46,12 +49,14 @@ final class MappingEngine
      * @param DestinationCatalog         $catalog         Destination catalog for the post type.
      * @param \DateTimeZone              $site_tz         Site time zone.
      * @param bool                       $collect_details Whether to collect preview details.
+     * @param MarkupPolicy|null          $markup          Shortcode/block policy for rich text (default: neutralize).
      *
      * @return MappedRecord
      */
-    public function evaluate(mixed $record, array $rows, DestinationCatalog $catalog, \DateTimeZone $site_tz, bool $collect_details = false): MappedRecord
+    public function evaluate(mixed $record, array $rows, DestinationCatalog $catalog, \DateTimeZone $site_tz, bool $collect_details = false, ?MarkupPolicy $markup = null): MappedRecord
     {
-        $result = new MappedRecord();
+        $this->markup = $markup ?? new MarkupPolicy();
+        $result       = new MappedRecord();
 
         foreach ($rows as $index => $row) {
             $position = (string) ($index + 1);
@@ -395,7 +400,8 @@ final class MappingEngine
         }
         switch ($destination->category) {
             case Destination::CORE:
-                return $catalog->core()->normalize($destination->key, $value, $site_tz, $catalog->post_type);
+                $value = $catalog->core()->normalize($destination->key, $value, $site_tz, $catalog->post_type);
+                return is_string($value) && in_array($destination->key, [CoreFields::CONTENT, CoreFields::EXCERPT], true) ? $this->markup->apply($value) : $value;
 
             case Destination::META:
                 $text = Transformer::stringify($value, $site_tz);
@@ -403,7 +409,8 @@ final class MappingEngine
                 return $is_json ? $text : wp_kses_post($text);
 
             case Destination::ACF:
-                return $this->acf_normalizer->normalize((array) $destination->acf_field, $value, $site_tz);
+                $value = $this->acf_normalizer->normalize((array) $destination->acf_field, $value, $site_tz);
+                return is_string($value) && $destination->acf_type() === 'wysiwyg' ? $this->markup->apply($value) : $value;
         }
 
         throw new MappingError(__('Unknown destination.', 'post-press-api'));

@@ -21,7 +21,8 @@ use PostPressAPI\Sync\ImportRunner;
  * Every route requires manage_options through its permission callback and uses
  * WordPress's standard REST authentication (cookie + X-WP-Nonce from the admin
  * screen). Routes that run imports also require the destination post type's
- * capabilities. Responses never contain credentials.
+ * capabilities. Responses are redacted: the preset's saved credential and
+ * credential-like request values are masked in previews and run summaries.
  *
  *   GET  /destinations?post_type=…        core fields, statuses, and ACF fields for a post type
  *   POST /test-request                     fetch (or decode pasted JSON) and describe the sample
@@ -193,7 +194,7 @@ final class RestController
             return $input;
         }
 
-        return rest_ensure_response($this->services->preview()->test_request($input['preset'], $input['secret'], $input['sample']));
+        return rest_ensure_response($this->services->preview()->test_request($input['preset'], $input['secret'], $input['sample'], $input['redactor']));
     }
 
     /**
@@ -210,7 +211,7 @@ final class RestController
             return $input;
         }
 
-        return rest_ensure_response($this->services->preview()->dry_run($input['preset'], $input['secret'], $input['sample']));
+        return rest_ensure_response($this->services->preview()->dry_run($input['preset'], $input['secret'], $input['sample'], $input['redactor']));
     }
 
     /**
@@ -318,7 +319,7 @@ final class RestController
      * @param \WP_REST_Request $request    Request.
      * @param bool             $is_dry_run Whether destination checks apply.
      *
-     * @return array{preset: array<string, mixed>, secret: string|null, sample: string|null}|\WP_Error
+     * @return array{preset: array<string, mixed>, secret: string|null, sample: string|null, redactor: \PostPressAPI\Support\Redactor}|\WP_Error
      */
     private function preview_input(\WP_REST_Request $request, bool $is_dry_run): array|\WP_Error
     {
@@ -366,9 +367,11 @@ final class RestController
         $use_sample = !empty($input['use_sample']);
 
         return [
-            'preset' => $preset,
-            'secret' => $secret,
-            'sample' => $use_sample ? substr((string) $parsed['sample'], 0, PresetRepository::MAX_SAMPLE_BYTES) : null,
+            'preset'   => $preset,
+            'secret'   => $secret,
+            'sample'   => $use_sample ? substr((string) $parsed['sample'], 0, PresetRepository::MAX_SAMPLE_BYTES) : null,
+            // The saved credential is masked even when a new one is being tested.
+            'redactor' => $this->services->secrets()->redactor($existing === null ? [] : [(string) $existing['id']]),
         ];
     }
 
@@ -407,7 +410,7 @@ final class RestController
         if ($state === null) {
             $last = $this->services->runs()->last($preset_id);
 
-            return ['active' => false, 'busy' => $busy, 'resume_in' => 0, 'run' => $last === null ? null : ImportRunner::summary($last)];
+            return ['active' => false, 'busy' => $busy, 'resume_in' => 0, 'run' => $last === null ? null : $this->services->runner()->public_summary($last)];
         }
 
         $active = in_array($state['status'] ?? '', ImportRunner::ACTIVE, true);
@@ -416,7 +419,7 @@ final class RestController
             'active'    => $active,
             'busy'      => $busy,
             'resume_in' => $active ? max(0, (int) ($state['resume_at'] ?? 0) - $now) : 0,
-            'run'       => ImportRunner::summary($state),
+            'run'       => $this->services->runner()->public_summary($state),
         ];
     }
 

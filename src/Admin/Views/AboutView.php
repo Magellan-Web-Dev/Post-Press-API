@@ -52,7 +52,7 @@ final class AboutView
             </p>
 
             <nav class="ppapi-section-nav" aria-label="<?php esc_attr_e('About sections', 'post-press-api'); ?>">
-                <a href="#ppapi-about-release"><?php esc_html_e('New in 1.0.5', 'post-press-api'); ?></a>
+                <a href="#ppapi-about-release"><?php esc_html_e('New in 1.0.6', 'post-press-api'); ?></a>
                 <a href="#ppapi-about-status"><?php esc_html_e('Site status', 'post-press-api'); ?></a>
                 <a href="#ppapi-about-setup"><?php esc_html_e('Getting started', 'post-press-api'); ?></a>
                 <a href="#ppapi-about-features"><?php esc_html_e('Features', 'post-press-api'); ?></a>
@@ -89,7 +89,7 @@ final class AboutView
     }
 
     /**
-     * Summarizes version 1.0.5 and links to its mapping and ACF documentation.
+     * Summarizes version 1.0.6 and links to its security documentation.
      *
      * @return void
      */
@@ -97,14 +97,14 @@ final class AboutView
     {
         ?>
         <section class="ppapi-card" id="ppapi-about-release" aria-labelledby="ppapi-about-release-heading">
-            <h2 id="ppapi-about-release-heading"><?php esc_html_e('New in version 1.0.5', 'post-press-api'); ?></h2>
+            <h2 id="ppapi-about-release-heading"><?php esc_html_e('New in version 1.0.6', 'post-press-api'); ?></h2>
             <ul class="ppapi-list">
-                <li><strong><?php esc_html_e('Conditional field mappings:', 'post-press-api'); ?></strong> <?php esc_html_e('Compare a source array\'s item count or match literal text before transformation. A matching rule can keep or clear a field, or skip a repeater row. Conditions are disabled by default, so existing mappings keep their behavior.', 'post-press-api'); ?></li>
-                <li><strong><?php esc_html_e('Custom ACF List Items:', 'post-press-api'); ?></strong> <?php esc_html_e('Map arrays of strings directly to a registered list_items field with No transformation, including inside groups and repeaters. Items are sanitized as plain text while preserving their order and duplicates.', 'post-press-api'); ?></li>
+                <li><strong><?php esc_html_e('Shortcodes and blocks in imported content:', 'post-press-api'); ?></strong> <?php esc_html_e('New presets neutralize them by default, with an allowlist and a trusted-source option. Presets saved before this setting existed keep all of them until you choose a setting in the editor.', 'post-press-api'); ?></li>
+                <li><strong><?php esc_html_e('Per-post permissions:', 'post-press-api'); ?></strong> <?php esc_html_e('Each run acts as one account, and every change to an existing post is checked against that account\'s permission for that post.', 'post-press-api'); ?></li>
+                <li><strong><?php esc_html_e('Safer requests and diagnostics:', 'post-press-api'); ?></strong> <?php esc_html_e('Redirects never leave the endpoint\'s origin, saved credentials are masked everywhere they could appear, and "Maximum records per run" is a hard limit.', 'post-press-api'); ?></li>
             </ul>
             <p>
-                <a href="#ppapi-about-mappings"><?php esc_html_e('Read about conditional mappings', 'post-press-api'); ?></a>
-                &middot; <a href="#ppapi-about-acf"><?php esc_html_e('Read about List Items support', 'post-press-api'); ?></a>
+                <a href="#ppapi-about-security"><?php esc_html_e('Read about security and your data', 'post-press-api'); ?></a>
             </p>
         </section>
         <?php
@@ -269,9 +269,9 @@ final class AboutView
             [__('Pagination & batches', 'post-press-api'), __('Follow offset/limit or page-number pagination until the API reports no more records. Large imports run in small saved batches and resume in the background.', 'post-press-api')],
             [__('Schedules', 'post-press-api'), __('Run manually, every 5 or 15 minutes, hourly, twice daily, daily, or on a custom interval of 5 minutes or more.', 'post-press-api')],
             [__('Media Library images', 'post-press-api'), __('Download image URLs into the Media Library for featured images, ACF image fields, URL/text fields, and custom meta. Images are reused by URL, so re-runs never create copies.', 'post-press-api')],
-            [__('History & logging', 'post-press-api'), __('Per-preset run history with record counts and failed-record details — delete one, selected, or all runs — plus a bounded activity log, never containing credentials or payloads.', 'post-press-api')],
+            [__('History & logging', 'post-press-api'), __('Per-preset run history with record counts and failed-record details — delete one, selected, or all runs — plus a bounded activity log. Saved credentials are masked and payloads are never stored.', 'post-press-api')],
             [__('Preset export & import', 'post-press-api'), __('Move presets between sites as JSON files. Credentials are never exported; imports match local ACF fields and the author, and always start disabled.', 'post-press-api')],
-            [__('Security built in', 'post-press-api'), __('Administrator-only screens, nonces, server-side requests to public addresses only, credentials stored server-side and never shown again, and no credentials sent to other hosts.', 'post-press-api')],
+            [__('Security built in', 'post-press-api'), __('Administrator-only screens, nonces, server-side requests to public addresses only, credentials stored server-side and never shown again, no request forwarded to another host, and per-post permission checks for every change.', 'post-press-api')],
         ];
         ?>
         <section class="ppapi-card" id="ppapi-about-features" aria-labelledby="ppapi-about-features-heading">
@@ -560,9 +560,11 @@ define('DISABLE_WP_CRON', true);
             <h2 id="ppapi-about-security-heading"><?php esc_html_e('Security and your data', 'post-press-api'); ?></h2>
             <ul class="ppapi-list">
                 <li><?php esc_html_e('Only administrators (manage_options) can use Post Press API, and saving or running a preset also requires permission to create — and if needed publish — posts of the destination type.', 'post-press-api'); ?></li>
-                <li><?php esc_html_e('Requests are made by this server to public addresses only, with TLS certificate checks on. Credentials are only sent to https:// endpoints and never follow a redirect to another host.', 'post-press-api'); ?></li>
+                <li><?php esc_html_e('Each run acts as one account: the administrator who started it, or for scheduled runs the user who last saved or enabled the preset. Before an existing post is updated, linked, restored, re-assigned, or published, that account\'s permission for that specific post is checked; posts it may not edit are left untouched.', 'post-press-api'); ?></li>
+                <li><?php esc_html_e('Requests are made by this server to public addresses only, with TLS certificate checks on. Credentials are only sent to https:// endpoints. Redirects are followed only within the same scheme, host, and port, so headers, credentials, and request bodies never reach another host.', 'post-press-api'); ?></li>
                 <li><?php esc_html_e('Tokens and API keys are stored server-side, separately from the preset, and never shown again: leave the field blank to keep a saved credential, or remove it explicitly. Changing the endpoint host requires entering the credential again.', 'post-press-api'); ?></li>
-                <li><?php esc_html_e('Previews, history, and the activity log never contain credentials (even if an API echoes one back) and never store full payloads.', 'post-press-api'); ?></li>
+                <li><?php esc_html_e('Saved credentials and credential-like header or query values are masked in previews, run history, and the activity log, even if an API echoes them back; full payloads are never stored. Masking recognizes known values only, so do not type secrets into URL paths or body templates.', 'post-press-api'); ?></li>
+                <li><?php esc_html_e('HTML filtering does not stop shortcodes or block markup from running when a post is displayed. New presets neutralize them in imported content by default; presets saved before this setting existed keep all of them until you choose a setting.', 'post-press-api'); ?></li>
                 <li><?php esc_html_e('Image downloads go to public addresses only, never carry the preset\'s credentials, and are checked for size and real image type before WordPress stores them. Attachments keep only a hash of the source URL.', 'post-press-api'); ?></li>
                 <li><?php esc_html_e('Preset exports never include stored credentials. Imported files are validated strictly and always create a new, disabled preset.', 'post-press-api'); ?></li>
                 <li>

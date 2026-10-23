@@ -1,0 +1,9 @@
+# Development files are tracked in git but never ship. GitHub tag archives —
+# which the built-in updater installs — honor export-ignore; build.sh excludes
+# the same paths from the upload zip.
+/tests export-ignore
+/build export-ignore
+/build.sh export-ignore
+/.gitignore export-ignore
+/.gitattributes export-ignore
+.DS_Store export-ignore

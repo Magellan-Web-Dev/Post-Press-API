@@ -9,8 +9,10 @@ if (!defined('ABSPATH')) exit;
 use PostPressAPI\Mapping\CoreFields;
 use PostPressAPI\Mapping\MappedRecord;
 use PostPressAPI\Mapping\MappingEngine;
+use PostPressAPI\Mapping\MarkupPolicy;
 use PostPressAPI\Presets\PresetSchema;
 use PostPressAPI\Support\Clock;
+use PostPressAPI\Support\Permissions;
 
 /**
  * Imports one record: identity → mapping → matching → change detection → writes.
@@ -33,8 +35,13 @@ use PostPressAPI\Support\Clock;
  * record is retried — on the same post — by the next run, even if the source
  * did not change.
  *
- * Dry runs evaluate the same identity, mapping, matching, and fingerprint logic
- * but never write posts, meta, or tracking state.
+ * Authorization: before anything is written, the run's account
+ * ({@see RunContext::$user_id}) must be allowed to make that change — create a
+ * post for the author and status, or edit, restore, reassign, or publish the
+ * actual existing post. A denied record fails without any write or download.
+ *
+ * Dry runs evaluate the same identity, mapping, matching, authorization, and
+ * fingerprint logic but never write posts, meta, or tracking state.
  */
 final class RecordProcessor
 {
@@ -66,7 +73,7 @@ final class RecordProcessor
         }
 
         $display = $identity['display'];
-        $mapped  = $this->engine->evaluate($record, (array) $preset['mappings'], $context->catalog, $context->site_tz, $context->dry_run);
+        $mapped  = $this->engine->evaluate($record, (array) $preset['mappings'], $context->catalog, $context->site_tz, $context->dry_run, MarkupPolicy::from_preset($preset));
 
         if ($mapped->has_errors()) {
             return new RecordOutcome(RecordOutcome::FAILED, $position, $display, null, implode(' ', $mapped->errors()), $mapped->details());
@@ -127,15 +134,20 @@ final class RecordProcessor
      */
     private function create(int $position, string $display, array $identity, MappedRecord $mapped, string $fingerprint, RunContext $context): RecordOutcome
     {
-        if ($context->dry_run) {
-            return new RecordOutcome(RecordOutcome::CREATED, $position, $display, null, __('Would create a new post.', 'post-press-api'), $mapped->details());
-        }
-
         $preset  = $context->preset;
         $core    = $mapped->core_values();
         $author  = isset($core[CoreFields::AUTHOR]) ? (int) $core[CoreFields::AUTHOR] : (int) $preset['destination']['author'];
         $status  = isset($core[CoreFields::STATUS]) ? (string) $core[CoreFields::STATUS] : (string) $preset['destination']['status'];
         $post_id = null;
+
+        $denied = Permissions::create_problem($context->user_id, (string) $preset['destination']['post_type'], $author, $status);
+        if ($denied !== null) {
+            return new RecordOutcome(RecordOutcome::FAILED, $position, $display, null, $denied, $mapped->details());
+        }
+
+        if ($context->dry_run) {
+            return new RecordOutcome(RecordOutcome::CREATED, $position, $display, null, __('Would create a new post.', 'post-press-api'), $mapped->details());
+        }
 
         try {
             $post_id = $this->writer->create((string) $preset['destination']['post_type'], $core, $author, $this->tracking($preset, $identity));
@@ -174,6 +186,26 @@ final class RecordProcessor
      */
     private function update(int $position, string $display, int $post_id, bool $adopt, bool $restore, bool $complete, array $identity, MappedRecord $mapped, string $fingerprint, RunContext $context): RecordOutcome
     {
+        // Created by an earlier attempt that failed before its first successful completion.
+        $finishing_create = !$adopt && !$complete && !$restore
+            && (string) get_post_meta($post_id, PostWriter::META_FINGERPRINT, true) === '';
+
+        // A mapped status always applies. A post whose creation never completed
+        // (still a draft from the first attempt) also gets the preset's default status.
+        $core   = $mapped->core_values();
+        $status = $core[CoreFields::STATUS] ?? ($finishing_create ? (string) $context->preset['destination']['status'] : null);
+
+        $denied = Permissions::edit_problem(
+            $context->user_id,
+            $post_id,
+            $restore,
+            isset($core[CoreFields::AUTHOR]) ? (int) $core[CoreFields::AUTHOR] : null,
+            $status === null ? null : (string) $status
+        );
+        if ($denied !== null) {
+            return new RecordOutcome(RecordOutcome::FAILED, $position, $display, $post_id, $denied, $mapped->details());
+        }
+
         if ($context->dry_run) {
             $message = match (true) {
                 $restore   => __('Would restore post #%d from the trash (as a draft) and update it.', 'post-press-api'),
@@ -185,10 +217,6 @@ final class RecordProcessor
             return new RecordOutcome(RecordOutcome::UPDATED, $position, $display, $post_id, sprintf($message, $post_id), $mapped->details());
         }
 
-        // Created by an earlier attempt that failed before its first successful completion.
-        $finishing_create = !$adopt && !$complete && !$restore
-            && (string) get_post_meta($post_id, PostWriter::META_FINGERPRINT, true) === '';
-
         try {
             if ($restore) {
                 $this->writer->untrash($post_id);
@@ -196,13 +224,9 @@ final class RecordProcessor
 
             $this->writer->mark_pending($post_id, $adopt ? $this->tracking($context->preset, $identity) : []);
 
-            $core = $mapped->core_values();
             $this->writer->update_core($post_id, $core);
             $this->writer->apply_fields($post_id, $mapped);
 
-            // A mapped status always applies. A post whose creation never completed
-            // (still a draft from the first attempt) also gets the preset's default status.
-            $status = $core[CoreFields::STATUS] ?? ($finishing_create ? (string) $context->preset['destination']['status'] : null);
             if ($status !== null) {
                 $this->writer->set_status($post_id, (string) $status);
             }

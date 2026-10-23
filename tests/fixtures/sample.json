@@ -1,0 +1,46 @@
+{
+  "ok": true,
+  "data": [
+    {
+      "id": "ada78067-d914-41ae-82ec-9a4f0cb249c9",
+      "submitted_at": "2026-10-18T20:05:37.463391+00:00",
+      "updated_at": "2026-10-18T20:05:37.463391+00:00",
+      "status": "received",
+      "submitter": {
+        "name": "Test Submitter",
+        "email": "submitter@example.com"
+      },
+      "website": {
+        "url": "https://gces.us",
+        "host": "gces.us",
+        "advisor": "Galen Bargerstock"
+      },
+      "event": {
+        "title": "Medicare Open Enrollment Q&A (Virtual)",
+        "description": "Live Zoom session about Medicare enrollment.",
+        "virtual": true,
+        "virtual_meeting_url": "https://zoom.us/j/98765432100",
+        "timezone": "Eastern"
+      },
+      "location": null,
+      "sessions": [
+        {
+          "date": "2026-11-05",
+          "time": "12:00",
+          "time_12h": "12:00 PM"
+        }
+      ],
+      "dates_text": [
+        "Nov 5, 2026 at 12:00 PM Eastern"
+      ],
+      "image": null,
+      "airtable": null
+    }
+  ],
+  "pagination": {
+    "total": 1,
+    "limit": 100,
+    "offset": 0,
+    "has_more": false
+  }
+}

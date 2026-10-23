@@ -127,6 +127,13 @@ final class PresetRepository
             return null;
         }
 
+        // Presets saved before the shortcode/block policy existed keep their earlier
+        // behavior (content kept as filtered by wp_kses_post) until an administrator
+        // chooses a policy; the editor flags this. Existing posts are never rewritten.
+        if (is_array($stored['destination'] ?? null) && !array_key_exists('markup', $stored['destination'])) {
+            $stored['destination']['markup'] = \PostPressAPI\Mapping\MarkupPolicy::TRUSTED;
+        }
+
         $preset       = PresetSchema::normalize($stored);
         $preset['id'] = $id;
 

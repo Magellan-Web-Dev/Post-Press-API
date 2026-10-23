@@ -6,6 +6,8 @@ namespace PostPressAPI\Presets;
 
 if (!defined('ABSPATH')) exit;
 
+use PostPressAPI\Support\Redactor;
+
 /**
  * Server-side credential storage, one non-autoloaded option per preset.
  *
@@ -70,6 +72,26 @@ final class SecretStore
         }
 
         return $secret['value'];
+    }
+
+    /**
+     * A redactor that masks the saved credentials of the given presets.
+     *
+     * The saved value is masked regardless of origin: an API may echo it back
+     * even when it was not sent on this request.
+     *
+     * @param list<string> $ids Preset IDs.
+     *
+     * @return Redactor
+     */
+    public function redactor(array $ids): Redactor
+    {
+        $redactor = new Redactor();
+        foreach ($ids as $id) {
+            $redactor->add_secret($this->get((string) $id)['value'] ?? null);
+        }
+
+        return $redactor;
     }
 
     /**

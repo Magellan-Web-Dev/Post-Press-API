@@ -19,11 +19,21 @@ if (!defined('ABSPATH')) exit;
  *  no GitHub requests are made, no "Check for updates" link is shown, and no
  *  update-check notices are displayed.
  *
+ * Update source isolation:
+ *  The plugin header declares "Update URI: https://github.com/<owner>/<repo>", so
+ *  WordPress (5.8+) does not offer this plugin updates from WordPress.org and
+ *  instead asks the update_plugins_github.com filter (updateFromSource()). Every
+ *  update entry for this plugin's basename must carry that Update URI as its id
+ *  and a package from this repository; any other entry — for example from a
+ *  directory plugin that happens to share the post-press-api slug — is removed
+ *  when the update transient is saved and when it is read, including while
+ *  GitHub is unreachable. Entries for other plugins are never touched.
+ *
  * Release detection flow:
- *  1. WordPress fires pre_set_site_transient_update_plugins on a scheduled check.
- *  2. checkForUpdate() fetches (or returns a 12-hour cached copy of) the latest
- *     GitHub release via the REST API.
- *  3. If the remote version is newer than PPAPI_VERSION the plugin is injected into
+ *  1. WordPress checks for updates and calls updateFromSource() for this plugin,
+ *     then fires pre_set_site_transient_update_plugins (checkForUpdate()).
+ *  2. Both use the latest GitHub release from the REST API (cached for 12 hours).
+ *  3. If the remote version is newer than PPAPI_VERSION the plugin is listed in
  *     WordPress's $transient->response array, which triggers the standard update UI.
  *     Otherwise it is listed in $transient->no_update so the auto-update toggle works.
  *
@@ -50,6 +60,9 @@ final class GitHubUpdater
      * @var string
      */
     private const REPOSITORY = 'Magellan-Web-Dev/Post-Press-API';
+
+    /** @var string Host of the Update URI header; WordPress calls the update_plugins_{host} filter. */
+    private const UPDATE_HOST = 'github.com';
 
     /** @var string GitHub REST API endpoint template for the latest release; %s is the owner/repo. */
     private const API_URL = 'https://api.github.com/repos/%s/releases/latest';
@@ -96,6 +109,8 @@ final class GitHubUpdater
         }
 
         add_filter('pre_set_site_transient_update_plugins', [self::class, 'checkForUpdate']);
+        add_filter('site_transient_update_plugins',         [self::class, 'removeForeignEntries']);
+        add_filter('update_plugins_' . self::UPDATE_HOST,   [self::class, 'updateFromSource'], 10, 4);
         add_filter('plugins_api',                           [self::class, 'pluginsApi'], 10, 3);
 
         // Runs after WordPress has installed the package and before the update
@@ -129,7 +144,13 @@ final class GitHubUpdater
      */
     public static function checkForUpdate(mixed $transient): mixed
     {
-        if (!self::isConfigured() || !is_object($transient) || empty($transient->checked)) {
+        if (!self::isConfigured() || !is_object($transient)) {
+            return $transient;
+        }
+
+        // Conflicting or stale entries go even when GitHub cannot be reached.
+        $transient = self::removeForeignEntries($transient);
+        if (empty($transient->checked)) {
             return $transient;
         }
 
@@ -147,10 +168,130 @@ final class GitHubUpdater
                 unset($transient->no_update[$plugin_basename]);
             }
         } else {
+            if (isset($transient->response) && is_array($transient->response)) {
+                unset($transient->response[$plugin_basename]);
+            }
             $transient->no_update[$plugin_basename] = $item;
         }
 
         return $transient;
+    }
+
+    /**
+     * Supplies this plugin's update through WordPress's Update URI mechanism
+     * (the update_plugins_github.com filter). Other plugins whose Update URI
+     * also points at github.com are passed through unchanged.
+     *
+     * @param mixed $update      Update data so far (false when none).
+     * @param mixed $plugin_data Plugin header data.
+     * @param mixed $plugin_file Plugin basename.
+     * @param mixed $locales     Installed locales.
+     *
+     * @return mixed
+     */
+    public static function updateFromSource(mixed $update, mixed $plugin_data, mixed $plugin_file, mixed $locales = []): mixed
+    {
+        if (!self::isConfigured() || $plugin_file !== self::pluginBasename()) {
+            return $update;
+        }
+
+        // A different plugin installed in this folder with its own Update URI is not ours to update.
+        if (is_array($plugin_data) && rtrim((string) ($plugin_data['UpdateURI'] ?? ''), '/') !== self::updateUri()) {
+            return $update;
+        }
+
+        $release = self::getLatestRelease();
+        if (!$release) {
+            return false;
+        }
+
+        $item = self::buildUpdateItem($release, self::currentVersion());
+
+        return [
+            'id'           => $item->id,
+            'slug'         => $item->slug,
+            'version'      => $item->new_version,
+            'url'          => $item->url,
+            'package'      => $item->package,
+            'requires'     => $item->requires,
+            'requires_php' => $item->requires_php,
+        ];
+    }
+
+    /**
+     * Removes update entries for this plugin's basename that do not come from
+     * its GitHub repository, plus offers that are not newer than the installed
+     * version. Never makes a network request; entries of other plugins are kept.
+     *
+     * Runs when the update transient is saved and whenever it is read.
+     *
+     * @param mixed $transient The update_plugins transient.
+     *
+     * @return mixed
+     */
+    public static function removeForeignEntries(mixed $transient): mixed
+    {
+        if (!self::isConfigured() || !is_object($transient)) {
+            return $transient;
+        }
+
+        $plugin_basename = self::pluginBasename();
+        foreach (['response', 'no_update'] as $list) {
+            if (!isset($transient->{$list}) || !is_array($transient->{$list}) || !array_key_exists($plugin_basename, $transient->{$list})) {
+                continue;
+            }
+
+            $entry = $transient->{$list}[$plugin_basename];
+            $stale = $list === 'response' && version_compare((string) self::entryField($entry, 'new_version'), self::currentVersion(), '<=');
+            if (!self::isOwnEntry($entry) || $stale) {
+                unset($transient->{$list}[$plugin_basename]);
+            }
+        }
+
+        return $transient;
+    }
+
+    /**
+     * Whether an update entry belongs to this plugin's GitHub repository.
+     *
+     * @param mixed $entry Update entry (object or array).
+     *
+     * @return bool
+     */
+    private static function isOwnEntry(mixed $entry): bool
+    {
+        $package = (string) self::entryField($entry, 'package');
+        $prefix  = sprintf(substr(self::ZIP_URL, 0, (int) strrpos(self::ZIP_URL, '%s')), self::repository());
+
+        return rtrim((string) self::entryField($entry, 'id'), '/') === self::updateUri()
+            && ($package === '' || str_starts_with($package, $prefix));
+    }
+
+    /**
+     * Reads a field of an update entry stored as an object or array.
+     *
+     * @param mixed  $entry Entry.
+     * @param string $field Field.
+     *
+     * @return mixed
+     */
+    private static function entryField(mixed $entry, string $field): mixed
+    {
+        if (is_object($entry)) {
+            return $entry->{$field} ?? null;
+        }
+
+        return is_array($entry) ? ($entry[$field] ?? null) : null;
+    }
+
+    /**
+     * The plugin's Update URI header value.
+     *
+     * @return string
+     */
+    private static function updateUri(): string
+    {
+        return 'https://' . self::UPDATE_HOST . '/' . self::repository();
     }
 
     /**
@@ -169,7 +310,7 @@ final class GitHubUpdater
         $newer = version_compare($release['version'], $current, '>');
 
         return (object) [
-            'id'           => self::PLUGIN_SLUG,
+            'id'           => self::updateUri(),
             'slug'         => self::PLUGIN_SLUG,
             'plugin'       => self::pluginBasename(),
             'new_version'  => $newer ? $release['version'] : $current,
