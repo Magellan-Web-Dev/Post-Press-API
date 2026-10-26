@@ -52,7 +52,7 @@ final class AboutView
             </p>
 
             <nav class="ppapi-section-nav" aria-label="<?php esc_attr_e('About sections', 'post-press-api'); ?>">
-                <a href="#ppapi-about-release"><?php esc_html_e('New in 1.0.6', 'post-press-api'); ?></a>
+                <a href="#ppapi-about-release"><?php esc_html_e('New in 1.0.7', 'post-press-api'); ?></a>
                 <a href="#ppapi-about-status"><?php esc_html_e('Site status', 'post-press-api'); ?></a>
                 <a href="#ppapi-about-setup"><?php esc_html_e('Getting started', 'post-press-api'); ?></a>
                 <a href="#ppapi-about-features"><?php esc_html_e('Features', 'post-press-api'); ?></a>
@@ -89,7 +89,7 @@ final class AboutView
     }
 
     /**
-     * Summarizes version 1.0.6 and links to its security documentation.
+     * Summarizes version 1.0.7 and links to its preset import documentation.
      *
      * @return void
      */
@@ -97,14 +97,14 @@ final class AboutView
     {
         ?>
         <section class="ppapi-card" id="ppapi-about-release" aria-labelledby="ppapi-about-release-heading">
-            <h2 id="ppapi-about-release-heading"><?php esc_html_e('New in version 1.0.6', 'post-press-api'); ?></h2>
+            <h2 id="ppapi-about-release-heading"><?php esc_html_e('New in version 1.0.7', 'post-press-api'); ?></h2>
             <ul class="ppapi-list">
-                <li><strong><?php esc_html_e('Shortcodes and blocks in imported content:', 'post-press-api'); ?></strong> <?php esc_html_e('New presets neutralize them by default, with an allowlist and a trusted-source option. Presets saved before this setting existed keep all of them until you choose a setting in the editor.', 'post-press-api'); ?></li>
-                <li><strong><?php esc_html_e('Per-post permissions:', 'post-press-api'); ?></strong> <?php esc_html_e('Each run acts as one account, and every change to an existing post is checked against that account\'s permission for that post.', 'post-press-api'); ?></li>
-                <li><strong><?php esc_html_e('Safer requests and diagnostics:', 'post-press-api'); ?></strong> <?php esc_html_e('Redirects never leave the endpoint\'s origin, saved credentials are masked everywhere they could appear, and "Maximum records per run" is a hard limit.', 'post-press-api'); ?></li>
+                <li><strong><?php esc_html_e('Remove mappings while importing a preset:', 'post-press-api'); ?></strong> <?php esc_html_e('Leave out ACF mappings — whole groups and repeaters or single sub fields — that this site cannot or should not use, and import the rest unchanged. Nothing is removed unless you choose it, and removed mappings stay listed until you create the preset so you can restore them.', 'post-press-api'); ?></li>
+                <li><strong><?php esc_html_e('Disable matching existing posts:', 'post-press-api'); ?></strong> <?php esc_html_e('If an imported preset finds existing posts through an ACF field this site lacks, turn that lookup off. The external record ID, duplicate policy, and tracking of the preset\'s own posts are unchanged.', 'post-press-api'); ?></li>
+                <li><strong><?php esc_html_e('Steadier import review:', 'post-press-api'); ?></strong> <?php esc_html_e('Automatic field matches are re-checked on every refresh, while fields you choose and mappings you remove are kept through refreshes, post type changes, and validation errors.', 'post-press-api'); ?></li>
             </ul>
             <p>
-                <a href="#ppapi-about-security"><?php esc_html_e('Read about security and your data', 'post-press-api'); ?></a>
+                <a href="#ppapi-about-transfer"><?php esc_html_e('Read about exporting and importing presets', 'post-press-api'); ?></a>
             </p>
         </section>
         <?php
@@ -270,7 +270,7 @@ final class AboutView
             [__('Schedules', 'post-press-api'), __('Run manually, every 5 or 15 minutes, hourly, twice daily, daily, or on a custom interval of 5 minutes or more.', 'post-press-api')],
             [__('Media Library images', 'post-press-api'), __('Download image URLs into the Media Library for featured images, ACF image fields, URL/text fields, and custom meta. Images are reused by URL, so re-runs never create copies.', 'post-press-api')],
             [__('History & logging', 'post-press-api'), __('Per-preset run history with record counts and failed-record details — delete one, selected, or all runs — plus a bounded activity log. Saved credentials are masked and payloads are never stored.', 'post-press-api')],
-            [__('Preset export & import', 'post-press-api'), __('Move presets between sites as JSON files. Credentials are never exported; imports match local ACF fields and the author, and always start disabled.', 'post-press-api')],
+            [__('Preset export & import', 'post-press-api'), __('Move presets between sites as JSON files. Credentials are never exported; imports match local ACF fields and the author, can leave out mappings the site does not support, and always start disabled.', 'post-press-api')],
             [__('Security built in', 'post-press-api'), __('Administrator-only screens, nonces, server-side requests to public addresses only, credentials stored server-side and never shown again, no request forwarded to another host, and per-post permission checks for every change.', 'post-press-api')],
         ];
         ?>
@@ -508,7 +508,9 @@ define('DISABLE_WP_CRON', true);
                 <li><?php esc_html_e('Export: choose Export JSON in the preset list or the editor header. The file holds the saved request, response, destination, mappings, duplicate rules, pagination, schedule, and batch size, and optionally the saved sample JSON.', 'post-press-api'); ?></li>
                 <li><?php esc_html_e('Stored credentials, history, run state, posts, and media are never exported. Values typed directly into URLs, headers, bodies, mappings, or samples are included, so review the file before sharing it.', 'post-press-api'); ?></li>
                 <li><?php esc_html_e('Import: click Import preset JSON above the preset list and upload the file (up to 2 MB). Files from an unsupported version, or with settings that would be changed or truncated, are rejected rather than altered.', 'post-press-api'); ?></li>
-                <li><?php esc_html_e('Review the local post type, the author (matched by login), and a local ACF field for each ACF mapping. Fields are matched by key or by a unique name, type, and parent path; choose the rest yourself and use Refresh matches after changing the post type or a parent field.', 'post-press-api'); ?></li>
+                <li><?php esc_html_e('Review the local post type, the author (matched by login), and a local ACF field for each ACF mapping. Fields are matched by key or by a unique name, type, and parent path; choose the rest yourself and use Refresh matches after changing the post type or a parent field. Fields you choose stay selected through refreshes and post type changes.', 'post-press-api'); ?></li>
+                <li><?php esc_html_e('Remove from this import leaves an ACF mapping out of the new preset — for example a field this site does not have. Removing a group or repeater also removes its sub fields. Removed mappings stay listed and can be restored before you create the preset; a field without a match is never dropped automatically and blocks the import until you choose a field or remove it.', 'post-press-api'); ?></li>
+                <li><?php esc_html_e('If the preset connects existing posts through an ACF field, you can instead disable matching existing posts. Posts the new preset did not create are then no longer found through that field, while its external record ID, duplicate policy, and tracking of its own posts stay the same.', 'post-press-api'); ?></li>
                 <li><?php esc_html_e('The imported preset gets a new ID and starts disabled. Re-enter its credentials before enabling it. Importing never fetches data or downloads images, and existing posts are not linked automatically — use Connect existing posts if the new preset should take them over.', 'post-press-api'); ?></li>
             </ul>
             <p>

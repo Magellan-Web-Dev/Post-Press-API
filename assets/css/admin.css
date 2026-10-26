@@ -468,3 +468,18 @@
 	width: 14em;
 	font-weight: 600;
 }
+
+/* Preset import review */
+
+.ppapi-wrap .ppapi-import-fields .ppapi-import-depth-1 .ppapi-import-source {
+	padding-left: 2em;
+}
+
+.ppapi-wrap .ppapi-import-fields .ppapi-import-depth-2 .ppapi-import-source {
+	padding-left: 3.5em;
+}
+
+.ppapi-wrap .ppapi-import-fields .ppapi-import-omitted .ppapi-import-source {
+	color: #646970;
+	text-decoration: line-through;
+}

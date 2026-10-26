@@ -11,6 +11,7 @@ use PostPressAPI\Admin\Views\EditorView;
 use PostPressAPI\Admin\Views\HistoryView;
 use PostPressAPI\Admin\Views\ListView;
 use PostPressAPI\Admin\Views\LogView;
+use PostPressAPI\Admin\Views\TransferView;
 use PostPressAPI\Presets\PresetRepository;
 use PostPressAPI\Presets\PresetSchema;
 use PostPressAPI\Services;
@@ -56,6 +57,8 @@ final class AdminPage
     private ?array $import_review = null;
     /** @var list<string> Import submission errors. */
     private array $import_errors = [];
+    /** @var list<string> Import review notices that are not errors. */
+    private array $import_notices = [];
 
     /**
      * Ends the request after a redirect. Replaceable so tests can observe redirects.
@@ -198,7 +201,7 @@ final class AdminPage
         $preset_id = isset($_GET['preset']) ? sanitize_key(wp_unslash($_GET['preset'])) : '';
 
         if ($view === 'import') {
-            (new \PostPressAPI\Admin\Views\TransferView($this->services))->render($this->import_data, $this->import_review, $this->import_errors);
+            (new \PostPressAPI\Admin\Views\TransferView($this->services))->render($this->import_data, $this->import_review, $this->import_errors, $this->import_notices);
             return;
         }
 
@@ -510,9 +513,19 @@ final class AdminPage
             $remaps = is_array($input['ppapi_import_remaps'] ?? null) ? $input['ppapi_import_remaps'] : [];
             // Blank controls can auto-match after changing the post type or parent.
             $remaps = array_filter($remaps, static fn ($key): bool => $key !== '');
-            $this->import_review = $this->services->transfer()->review($this->import_data, $type, $author, $remaps);
-            if ($action === 'import_save' && $this->import_review['problems'] === []) {
-                $saved = $this->services->transfer()->save($this->import_data, (string) $type, (int) $author, $remaps);
+            // Removals are explicit, keyed by path in the uploaded file, and checked against it.
+            $excluded = $input['ppapi_import_exclude'] ?? [];
+            if (!is_array($excluded)) {
+                throw new \InvalidArgumentException(__('Only ACF mappings listed in this file can be removed from the import.', 'post-press-api'));
+            }
+            $disable_match = ($input['ppapi_import_disable_match'] ?? '') === '1';
+            $this->import_review = $this->services->transfer()->review($this->import_data, $type, $author, $remaps, $excluded, $disable_match);
+            // Never create a preset whose omissions were not shown in the review just submitted.
+            $reviewed = is_string($input['ppapi_import_reviewed'] ?? null) ? $input['ppapi_import_reviewed'] : '';
+            if ($action === 'import_save' && $this->import_review['problems'] === [] && $reviewed !== TransferView::omission_key($this->import_review)) {
+                $this->import_notices[] = __('The mappings removed from this import changed, so the preset was not created yet. Check what will be omitted below, then choose Create disabled preset again.', 'post-press-api');
+            } elseif ($action === 'import_save' && $this->import_review['problems'] === []) {
+                $saved = $this->services->transfer()->save($this->import_data, (string) $type, (int) $author, $remaps, $excluded, $disable_match);
                 set_transient('ppapi_warnings_' . get_current_user_id(), $this->import_review['warnings'], 60);
                 ($this->terminate)(self::url(['view' => 'edit', 'preset' => $saved['id'], 'ppapi_notice' => 'imported']));
             }
