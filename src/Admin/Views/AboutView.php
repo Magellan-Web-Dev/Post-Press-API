@@ -52,7 +52,7 @@ final class AboutView
             </p>
 
             <nav class="ppapi-section-nav" aria-label="<?php esc_attr_e('About sections', 'post-press-api'); ?>">
-                <a href="#ppapi-about-release"><?php esc_html_e('New in 1.0.7', 'post-press-api'); ?></a>
+                <a href="#ppapi-about-release"><?php esc_html_e('New in 1.0.8', 'post-press-api'); ?></a>
                 <a href="#ppapi-about-status"><?php esc_html_e('Site status', 'post-press-api'); ?></a>
                 <a href="#ppapi-about-setup"><?php esc_html_e('Getting started', 'post-press-api'); ?></a>
                 <a href="#ppapi-about-features"><?php esc_html_e('Features', 'post-press-api'); ?></a>
@@ -89,7 +89,7 @@ final class AboutView
     }
 
     /**
-     * Summarizes version 1.0.7 and links to its preset import documentation.
+     * Summarizes version 1.0.8 and links to its transformation documentation.
      *
      * @return void
      */
@@ -97,14 +97,14 @@ final class AboutView
     {
         ?>
         <section class="ppapi-card" id="ppapi-about-release" aria-labelledby="ppapi-about-release-heading">
-            <h2 id="ppapi-about-release-heading"><?php esc_html_e('New in version 1.0.7', 'post-press-api'); ?></h2>
+            <h2 id="ppapi-about-release-heading"><?php esc_html_e('New in version 1.0.8', 'post-press-api'); ?></h2>
             <ul class="ppapi-list">
-                <li><strong><?php esc_html_e('Remove mappings while importing a preset:', 'post-press-api'); ?></strong> <?php esc_html_e('Leave out ACF mappings — whole groups and repeaters or single sub fields — that this site cannot or should not use, and import the rest unchanged. Nothing is removed unless you choose it, and removed mappings stay listed until you create the preset so you can restore them.', 'post-press-api'); ?></li>
-                <li><strong><?php esc_html_e('Disable matching existing posts:', 'post-press-api'); ?></strong> <?php esc_html_e('If an imported preset finds existing posts through an ACF field this site lacks, turn that lookup off. The external record ID, duplicate policy, and tracking of the preset\'s own posts are unchanged.', 'post-press-api'); ?></li>
-                <li><strong><?php esc_html_e('Steadier import review:', 'post-press-api'); ?></strong> <?php esc_html_e('Automatic field matches are re-checked on every refresh, while fields you choose and mappings you remove are kept through refreshes, post type changes, and validation errors.', 'post-press-api'); ?></li>
+                <li><strong><?php esc_html_e('Format list items (array):', 'post-press-api'); ?></strong> <?php esc_html_e('A new transformation converts each item of a source list to text — optionally parsing and reformatting it as a date/time — and keeps the result as a list for ACF List Items, checkbox, and multiple-select fields. For example, a dates_text list starting with "Nov 18, 2026 at 6:30 PM Central" can be stored in List Items as November 18, November 20, December 2.', 'post-press-api'); ?></li>
+                <li><strong><?php esc_html_e('Clear list rules:', 'post-press-api'); ?></strong> <?php esc_html_e('The source must be a list. Null items are skipped as in Join, and any other item that cannot be converted, including an invalid date, fails the mapping with its position. Text fields, custom meta, and other single-value destinations are rejected when you save.', 'post-press-api'); ?></li>
+                <li><strong><?php esc_html_e('Existing mappings unchanged:', 'post-press-api'); ?></strong> <?php esc_html_e('Join, Date/time, JSON encode, and No transformation behave as before, and existing presets keep their change detection. The new settings survive saving, reordering, nesting, duplication, and preset export/import.', 'post-press-api'); ?></li>
             </ul>
             <p>
-                <a href="#ppapi-about-transfer"><?php esc_html_e('Read about exporting and importing presets', 'post-press-api'); ?></a>
+                <a href="#ppapi-about-dates"><?php esc_html_e('Read about formatting dates in lists', 'post-press-api'); ?></a>
             </p>
         </section>
         <?php
@@ -263,7 +263,7 @@ final class AboutView
             [__('Request presets', 'post-press-api'), __('Any number of independent presets, each with its own endpoint, GET/POST method, query parameters, headers, JSON body, authentication, timeout, response-size limit, and retry count.', 'post-press-api')],
             [__('Test request & sample JSON', 'post-press-api'), __('Fetch a bounded sample without importing, or paste a response to configure mappings offline. See every path in the response with its type and an example value.', 'post-press-api')],
             [__('Nested mapping', 'post-press-api'), __('Read nested keys, array items, and whole lists (event.title, sessions[0].date, sessions[*].date) and write them to post fields, custom meta, or ACF fields — including ACF groups and repeaters.', 'post-press-api')],
-            [__('Transformations', 'post-press-api'), __('Convert values to text, numbers, booleans, validated URLs or emails, joined lists (optionally formatting each item as a date/time), JSON, dates in an explicit time zone, or mapped values such as approved → publish.', 'post-press-api')],
+            [__('Transformations', 'post-press-api'), __('Convert values to text, numbers, booleans, validated URLs or emails, joined lists or lists kept as arrays (optionally formatting each item as a date/time), JSON, dates in an explicit time zone, or mapped values such as approved → publish.', 'post-press-api')],
             [__('Safe updates', 'post-press-api'), __('Each record keeps a stable identity, so re-running updates the same post. Only changed records are rewritten, only mapped fields change, and missing or null values keep existing data by default.', 'post-press-api')],
             [__('Preview / dry run', 'post-press-api'), __('Run the same identity, mapping, matching, and change detection as a real import without writing posts, meta, attachments, or tracking data.', 'post-press-api')],
             [__('Pagination & batches', 'post-press-api'), __('Follow offset/limit or page-number pagination until the API reports no more records. Large imports run in small saved batches and resume in the background.', 'post-press-api')],
@@ -329,6 +329,7 @@ final class AboutView
             Transformer::URL      => __('Must be a valid http(s) URL.', 'post-press-api'),
             Transformer::EMAIL    => __('Must be a valid email address.', 'post-press-api'),
             Transformer::JOIN     => __('Joins a list with a separator (\n for new lines). Optionally formats each item as a date/time using input/output formats and time zones.', 'post-press-api'),
+            Transformer::FORMAT_LIST => __('Converts each item of a list to text and keeps a list (array) for ACF List Items, checkbox, and multiple-select fields. Optionally formats each item as a date/time using the same settings as Join. Null items are skipped; other invalid items fail the mapping.', 'post-press-api'),
             Transformer::JSON     => __('Stores any value as JSON text.', 'post-press-api'),
             Transformer::DATETIME => __('Parses dates and times with an optional input format and explicit input/output time zones.', 'post-press-api'),
             Transformer::MAP      => __('Converts listed values (approved → publish); unlisted values are kept, replaced by the fallback, or rejected.', 'post-press-api'),
@@ -366,7 +367,7 @@ final class AboutView
 
             <h3><?php esc_html_e('Transformations', 'post-press-api'); ?></h3>
             <?php $this->table([__('Transformation', 'post-press-api'), __('What it does', 'post-press-api')], $rows); ?>
-            <p><?php esc_html_e('Lists and objects are never silently turned into the text "Array": choose Join or JSON, or select one item such as sessions[0].', 'post-press-api'); ?></p>
+            <p><?php esc_html_e('Lists and objects are never silently turned into the text "Array": choose Join or JSON for text, Format list items to keep a list for list fields, or select one item such as sessions[0].', 'post-press-api'); ?></p>
 
             <h3><?php esc_html_e('When a value is missing or null', 'post-press-api'); ?></h3>
             <?php $this->table([__('Choice', 'post-press-api'), __('Effect', 'post-press-api')], $behaviors); ?>
@@ -374,9 +375,10 @@ final class AboutView
             <h3><?php esc_html_e('Mapping order', 'post-press-api'); ?></h3>
             <p><?php esc_html_e('Reorder mappings with Move up / Move down, or enter a whole number in Move to position and click Move (or press Enter). Positions start at 1 and cannot exceed the number of mappings in that list. Other rows shift to make room; settings and child mappings stay with the moved row. Nested mappings move within their own group or repeater. Save the preset to keep the order.', 'post-press-api'); ?></p>
 
-            <h3><?php esc_html_e('Dates and time zones', 'post-press-api'); ?></h3>
+            <h3 id="ppapi-about-dates"><?php esc_html_e('Dates and time zones', 'post-press-api'); ?></h3>
             <p><?php esc_html_e('To display November 18, November 20, December 2, map sessions[*].date, choose Join list into text, enable Format each item as a date/time before joining, set Output format to F j, and use a comma followed by a space as the separator. Invalid dates fail the mapping; null items are skipped.', 'post-press-api'); ?></p>
             <p><?php esc_html_e('For ISO dates such as 2026-11-18, leave Input format blank or use Y-m-d. To join times, use sessions[*].time with Input format H:i and Output format g:i A for values such as 6:30 PM. Choose a text field, textarea, or custom meta key as the destination.', 'post-press-api'); ?></p>
+            <p><?php esc_html_e('To keep separate items instead, for example in ACF List Items, choose Format list items (array) and enable Format each item as a date/time. For dates_text values such as "Nov 18, 2026 at 6:30 PM Central", set Input format to M j, Y \a\t g:i A \C\e\n\t\r\a\l, Input time zone and Output time zone to America/Chicago, and Output format to F j. The field then receives the list November 18, November 20, December 2. The backslashes make "at" and "Central" literal text; the input time zone, not the word Central, sets the zone. There is no separator, and an empty list stays empty.', 'post-press-api'); ?></p>
             <p><?php esc_html_e('Existing Join mappings keep joining plain values until date/time formatting is enabled. An empty list produces empty text. Invalid non-null dates report the failing item position. Missing/null source rules still apply, and fallback text skips transformations. Date formatting settings are included in preset JSON exports; older exports remain importable.', 'post-press-api'); ?></p>
             <p><?php esc_html_e('ISO 8601 values with an offset are converted to the site (or chosen) time zone, and date-only values such as 2026-11-05 are never shifted to another day. Names PHP cannot resolve, such as "Eastern", and ambiguous abbreviations such as CST are rejected rather than guessed: choose the Date/time transformation and set an explicit zone such as America/New_York.', 'post-press-api'); ?></p>
         </section>
@@ -407,7 +409,8 @@ final class AboutView
             <h2 id="ppapi-about-acf-heading"><?php esc_html_e('Advanced Custom Fields', 'post-press-api'); ?></h2>
             <p><?php esc_html_e('When you choose a post type, the editor lists the ACF field groups assigned to it, with each field\'s label, name, key, type, and parent. Values are saved with ACF\'s update_field() using field keys, so ACF links them correctly even on brand-new posts. Field keys always come from this site; nothing is created for you.', 'post-press-api'); ?></p>
             <?php $this->table([__('Field types', 'post-press-api'), __('How they are filled', 'post-press-api')], $rows); ?>
-            <p><?php esc_html_e('For List Items, map dates_text to the ACF field with No transformation. Each string becomes one item; date labels such as Nov 18, 2026 at 6:30 PM Central stay as text. Join and JSON encode produce strings and cannot fill this field. The source must be an array of strings; objects, nested arrays, and non-string items are rejected.', 'post-press-api'); ?></p>
+            <p><?php esc_html_e('For List Items, map the list, such as dates_text or sessions[*].date, to the ACF field. With No transformation each string is stored as received, so labels such as Nov 18, 2026 at 6:30 PM Central stay as text, and non-string items are rejected. With Format list items (array), each item is converted to text first — optionally reformatted as a date/time — and the field still receives a list. Join and JSON encode produce a single string and cannot fill this field. Objects and nested arrays are always rejected.', 'post-press-api'); ?></p>
+            <p><?php esc_html_e('Format list items also fills checkbox and multiple-select fields, where each formatted item must still match a choice. Text, date, and single-choice fields cannot receive a list.', 'post-press-api'); ?></p>
             <p><?php esc_html_e('An empty array empties List Items. Missing/null values follow the usual Keep existing value, Clear, or Fail rules; text constants and text fallbacks cannot supply a list. List Items works inside groups and repeaters, where Clear writes an empty array. Support is specific to list_items and does not enable other custom field types.', 'post-press-api'); ?></p>
             <p><?php esc_html_e('If ACF is deactivated or a field a preset needs disappears, only that preset stops — with an explanation in its history. Presets that only use post fields and custom meta never need ACF.', 'post-press-api'); ?></p>
         </section>
@@ -537,6 +540,7 @@ define('DISABLE_WP_CRON', true);
             ['sessions', '—', __('ACF repeater: date → date sub field, time → time sub field', 'post-press-api')],
             ['dates_text[*]', __('Join list into text, separator \n', 'post-press-api'), __('ACF text area or a meta key', 'post-press-api')],
             ['dates_text', __('No transformation', 'post-press-api'), __('Custom ACF List Items (array)', 'post-press-api')],
+            ['dates_text', __('Format list items (array), date/time formatting enabled, input format M j, Y \a\t g:i A \C\e\n\t\r\a\l, time zones America/Chicago, output F j', 'post-press-api'), __('Custom ACF List Items: ["November 18", "November 20", "December 2"]', 'post-press-api')],
             ['sessions[*].date', __('Join list into text, date/time formatting enabled, output F j, comma-and-space separator', 'post-press-api'), __('ACF text area/text field or a meta key', 'post-press-api')],
             ['location.city', '—', __('ACF text field (null today, so the existing value is kept)', 'post-press-api')],
         ];

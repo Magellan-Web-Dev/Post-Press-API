@@ -486,7 +486,7 @@ final class EditorView
                     <li><code>event.title</code> — <?php esc_html_e('nested keys', 'post-press-api'); ?></li>
                     <li><code>sessions.0.date</code>, <code>sessions[0].date</code> — <?php esc_html_e('array index', 'post-press-api'); ?></li>
                     <li><code>items[-1]</code>, <code>products[-1].name</code>, <code>groups[-1].members[-1].email</code> — <?php esc_html_e('the last item of any array, with optional nested keys; use [-1] when the current value itself is an array', 'post-press-api'); ?></li>
-                    <li><code>sessions[*].date</code>, <code>dates_text[*]</code> — <?php esc_html_e('every item (a list; use Join to make text)', 'post-press-api'); ?></li>
+                    <li><code>sessions[*].date</code>, <code>dates_text[*]</code> — <?php esc_html_e('every item (a list; use Join to make text, or Format list items to keep an array)', 'post-press-api'); ?></li>
                     <li><code>["key.with.dots"]</code>, <code>meta['a[b]']</code> — <?php esc_html_e('keys containing ".", "[", "]" or starting with "$"', 'post-press-api'); ?></li>
                     <li><code>$</code> — <?php esc_html_e('the whole record (or the current repeater item)', 'post-press-api'); ?></li>
                     <li><code>{event.title} – {website.host}</code> — <?php esc_html_e('template placeholders; {{ and }} write literal braces', 'post-press-api'); ?></li>

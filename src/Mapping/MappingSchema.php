@@ -16,7 +16,8 @@ if (!defined('ABSPATH')) exit;
  *   target_type  core | meta | acf
  *   target       core field name, meta key, or ACF field key
  *   transform    one of Transformer::TYPES
- *   options      transformation options (separator, join_datetime, formats, time zones, decimals, value map)
+ *   options      transformation options (separator, join_datetime, formats, time zones, decimals, value map);
+ *                join_datetime formats each item as a date/time for Join and Format list items
  *   condition    optional rule on the source before transformation; disabled by default
  *   on_missing   preserve | clear | fallback | fail | skip_row
  *   on_null      same choices as on_missing
@@ -172,8 +173,8 @@ final class MappingSchema
             if (empty($copy['condition']['enabled'])) {
                 unset($copy['condition']);
             }
-            // Adding an opt-in Join option must not invalidate existing imports.
-            if ($copy['transform'] !== Transformer::JOIN || empty($copy['options']['join_datetime'])) {
+            // Adding an opt-in item date option must not invalidate existing imports.
+            if (!in_array($copy['transform'], [Transformer::JOIN, Transformer::FORMAT_LIST], true) || empty($copy['options']['join_datetime'])) {
                 unset($copy['options']['join_datetime']);
             }
             // Off is the historical behavior: do not invalidate existing fingerprints.

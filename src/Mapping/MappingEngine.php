@@ -184,6 +184,11 @@ final class MappingEngine
                 $value = $mapped;
             }
         } else {
+            // A field changed after saving (for example from List Items to text) must not receive a list.
+            $list_error = $row['transform'] === Transformer::FORMAT_LIST ? Transformer::list_destination_error($destination) : null;
+            if ($list_error !== null) {
+                throw new MappingError($list_error);
+            }
             $value = $this->transformer->apply((string) $row['transform'], $value, (array) $row['options'], $site_tz);
         }
 

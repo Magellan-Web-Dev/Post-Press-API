@@ -62,4 +62,18 @@ final class Destination
     {
         return in_array($this->acf_type(), ['group', 'repeater'], true);
     }
+
+    /**
+     * Whether this ACF field stores a list: List Items, checkbox, or a multiple-choice select.
+     *
+     * @return bool
+     */
+    public function accepts_list(): bool
+    {
+        return match ($this->acf_type()) {
+            'list_items', 'checkbox' => true,
+            'select'                 => !empty($this->acf_field['multiple']),
+            default                  => false,
+        };
+    }
 }

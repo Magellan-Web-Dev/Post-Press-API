@@ -746,6 +746,10 @@
 				row.transform = value;
 				renderMappings();
 			}));
+			var storesList = !!(descriptor && (descriptor.multiple || descriptor.type === 'list_items'));
+			if (row.transform === 'format_list' && (row.target_type === 'core' || row.target_type === 'meta' || (descriptor && !storesList))) {
+				transformCol.appendChild(el('p', { className: 'ppapi-text-warning', id: base + '-list-warning', text: i18n.listDestination }));
+			}
 			transformCol.appendChild(renderTransformOptions(row, base));
 			fieldset.appendChild(transformCol);
 		}
@@ -907,8 +911,11 @@
 			}, extra));
 		}
 
-		if (row.transform === 'join') {
-			bind('separator', i18n.separator, { className: 'small-text code' });
+		var itemDates = row.transform === 'join' || row.transform === 'format_list';
+		if (itemDates) {
+			if (row.transform === 'join') {
+				bind('separator', i18n.separator, { className: 'small-text code' });
+			}
 			box.appendChild(el('label', { for: base + '-opt-join_datetime' }, [
 				el('input', {
 					type: 'checkbox', id: base + '-opt-join_datetime', checked: !!options.join_datetime,
@@ -918,13 +925,13 @@
 						renderMappings();
 						document.getElementById(base + '-opt-join_datetime').focus();
 					}
-				}), ' ' + i18n.joinDateTime
+				}), ' ' + (row.transform === 'join' ? i18n.joinDateTime : i18n.listDateTime)
 			]));
-			box.appendChild(el('p', { className: 'description', text: i18n.joinDateHelp }));
+			box.appendChild(el('p', { className: 'description', text: row.transform === 'join' ? i18n.joinDateHelp : i18n.listHelp }));
 		} else if (row.transform === 'decimal') {
 			bind('decimals', i18n.decimals, { className: 'small-text', inputmode: 'numeric' });
 		}
-		if (row.transform === 'datetime' || (row.transform === 'join' && options.join_datetime)) {
+		if (row.transform === 'datetime' || (itemDates && options.join_datetime)) {
 			bind('input_format', i18n.inputFormat, { className: 'code', placeholder: 'Y-m-d H:i' });
 			bind('input_timezone', i18n.inputTimezone, { list: 'ppapi-timezones', placeholder: 'America/New_York' });
 			bind('output_format', i18n.outputFormat, { className: 'code' });

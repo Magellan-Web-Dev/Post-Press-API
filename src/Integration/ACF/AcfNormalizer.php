@@ -169,7 +169,7 @@ final class AcfNormalizer
     private function list_items(mixed $value): array
     {
         if (!is_array($value) || !array_is_list($value)) {
-            throw new MappingError(__('List Items requires an array of text items. Select the list source path and use No transformation.', 'post-press-api'));
+            throw new MappingError(__('List Items requires an array of text items. Select the list source path and use No transformation or Format list items (array).', 'post-press-api'));
         }
 
         $items = [];

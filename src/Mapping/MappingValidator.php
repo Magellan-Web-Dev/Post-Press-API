@@ -170,7 +170,7 @@ final class MappingValidator
             $add(__('Only ACF groups and repeaters can have sub field mappings.', 'post-press-api'));
         }
 
-        $this->validate_transform($row, $add);
+        $this->validate_transform($row, $destination, $add);
         $this->validate_core_rules($row, $destination, $catalog, $add);
     }
 
@@ -225,19 +225,30 @@ final class MappingValidator
     }
 
     /**
-     * Validates transformation options.
+     * Validates transformation options and destinations that need a specific value shape.
      *
-     * @param array<string, mixed> $row Row.
-     * @param callable             $add Error callback.
+     * @param array<string, mixed> $row         Row.
+     * @param Destination          $destination Destination.
+     * @param callable             $add         Error callback.
      *
      * @return void
      */
-    private function validate_transform(array $row, callable $add): void
+    private function validate_transform(array $row, Destination $destination, callable $add): void
     {
         $options = (array) $row['options'];
 
+        if ($row['transform'] === Transformer::FORMAT_LIST) {
+            $error = Transformer::list_destination_error($destination);
+            if ($error !== null) {
+                $add($error);
+            }
+            if ($row['source_type'] !== MappingSchema::SOURCE_PATH) {
+                $add(__('Format list items (array) needs a source path that selects a list; constants and templates are text.', 'post-press-api'));
+            }
+        }
+
         if ($row['transform'] === Transformer::DATETIME
-            || ($row['transform'] === Transformer::JOIN && !empty($options['join_datetime']))) {
+            || (in_array($row['transform'], [Transformer::JOIN, Transformer::FORMAT_LIST], true) && !empty($options['join_datetime']))) {
             foreach (['input_timezone', 'output_timezone'] as $key) {
                 $name = (string) ($options[$key] ?? '');
                 if ($name !== '' && DateParser::timezone($name) === null) {

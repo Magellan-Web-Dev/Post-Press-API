@@ -4,7 +4,7 @@ Fetch JSON records from external APIs — manually or on a schedule — and map 
 
 - **Requires:** WordPress 6.0+, PHP 8.1+
 - **Optional:** Advanced Custom Fields (free or PRO). Repeater fields require ACF PRO.
-- **Version:** 1.0.7
+- **Version:** 1.0.8
 
 Post Press API makes **outbound** requests only. Receiving webhooks and two-way synchronization are out of scope for this version.
 
@@ -125,11 +125,24 @@ Reorder rows with **Move up / Move down**, or enter a whole number in **Move to 
 | Boolean | `true/false`, `1/0`, `yes/no`, `on/off`; anything else is an error. |
 | Validate URL / Validate email | Must be a valid http(s) URL or email address. |
 | Join list into text | Joins a list with a separator (`\n` = new line, `\t` = tab). Optionally format each item as a date/time before joining, using the input/output formats and time zones. Null items are skipped; nested lists are errors. |
+| Format list items (array) | Converts each item of a list to text and keeps a native array for ACF List Items, checkbox, and multiple-select fields. Optionally format each item as a date/time, with the same settings as Join; there is no separator. See [Formatting list items](#formatting-list-items). |
 | JSON encode | Encodes any value as JSON text. |
 | Date/time | Parses a date/time with an optional input format and input time zone, and optional output format and output time zone. |
 | Value map | Converts listed values (`approved` → `publish`); unlisted values are kept, replaced by the fallback, or rejected. |
 
 No mapping ever evaluates PHP, JavaScript, or expressions. Arrays and objects are never silently turned into the text "Array": the record fails with a message suggesting Join, JSON, or an indexed path.
+
+#### Formatting list items
+
+**Format list items (array)** is for destinations that store a list. It returns a PHP array of strings — never joined text, JSON, or a serialized string — so ACF receives the same kind of value as with No transformation. Previews show the result in JSON notation, for example `["November 18","November 20","December 2"]`.
+
+- **Source.** The source must be a list: a direct path such as `dates_text` or a wildcard projection such as `sessions[*].date`. A string (including JSON text), number, boolean, or object fails the mapping. An empty list produces an empty list.
+- **Items.** Order and duplicates are kept. Null items are skipped, as in Join (wildcard projections already leave out null and missing values). Without date formatting, text, numbers, and booleans become text with Join's rules (`3`, `1.5`, `true`, `false`). Nested arrays and objects fail with the item's position, for example *List item 2 is an object*.
+- **Dates.** With **Format each item as a date/time**, each item is parsed and formatted with the same input format, input time zone, output format, and output time zone as Date/time and Join, including time zone conversion, unshifted date-only values, and the default output formats. An item that cannot be read — an empty string, an impossible date such as `Nov 31`, or text such as `TBD` — fails the mapping with its position instead of being dropped.
+- **Destinations.** ACF List Items (including sub fields of groups and repeaters), checkbox, and multiple-select fields. Checkbox and select values still have to match a choice, and those fields still remove duplicate choices. Text fields, custom meta, post fields, and single-value ACF fields are rejected when the preset is saved, and again at run time if a field's type changes afterwards. Use Join for those. Groups and repeaters themselves still cannot have a transformation.
+- **Missing, null, and conditions.** Conditions still inspect the source before the transformation, and missing/null sources follow the mapping's missing/null settings. An empty list is a present value, not a missing one. Fallbacks skip the transformation, so a text fallback such as `["A"]` is not read as a list and fails for List Items.
+
+Settings are stored with the mapping (the date option uses the same `join_datetime` flag as Join), and they survive saving, reordering, nesting, duplication, and preset export/import. The transformation, its date option, and its formats are part of change detection, so changing them updates imported posts on the next run. Existing presets keep their fingerprints.
 
 ### Post fields
 
@@ -194,6 +207,23 @@ The same option works for times: `sessions[*].time` with input format `H:i` and 
 
 Values without an offset are read in the mapping's input time zone, or the site time zone when none is set. ISO 8601 values with an offset (`2026-10-18T20:05:37+00:00`, `…Z`) are converted to the output (or site) time zone. Date-only values such as `2026-11-05` are never shifted between days.
 
+**As List Items instead of text.** To store each date as its own List Items entry, map `dates_text` to the List Items field and choose **Format list items (array)**. For a source such as:
+
+```json
+{ "dates_text": ["Nov 18, 2026 at 6:30 PM Central", "Nov 20, 2026 at 6:30 PM Central", "Dec 2, 2026 at 6:30 PM Central"] }
+```
+
+enable **Format each item as a date/time** and enter:
+
+| Setting | Value |
+|---|---|
+| Input format | `M j, Y \a\t g:i A \C\e\n\t\r\a\l` |
+| Input time zone | `America/Chicago` |
+| Output format | `F j` |
+| Output time zone | `America/Chicago` |
+
+The field receives the array `["November 18", "November 20", "December 2"]`. The backslashes make `at` and `Central` literal text: "Central" is not a zone PHP can read, so the input time zone says what it means. With a different output time zone, the times are converted first, so `Asia/Tokyo` gives `["November 19", "November 21", "December 3"]`.
+
 Named zones that PHP cannot resolve, such as **"Eastern"**, and ambiguous abbreviations such as `CST` are rejected — the plugin never guesses. If a feed's times are in US Eastern time, choose the Date/time transformation and set the input time zone to `America/New_York` explicitly. Relative phrases such as `tomorrow` are rejected too.
 
 ## ACF fields
@@ -206,7 +236,7 @@ Values are written with `update_field()` **using field keys**, so ACF records th
 |---|---|
 | text, textarea, wysiwyg, number, range, email, url, oembed | Converted and validated (`textarea`/`wysiwyg` keep allowed HTML). |
 | true_false | Stored as 1/0. |
-| select, radio, button_group, checkbox | Values must be choice keys (or exact choice labels) unless the field allows custom values. Multi-select and checkbox take lists. |
+| select, radio, button_group, checkbox | Values must be choice keys (or exact choice labels) unless the field allows custom values. Multi-select and checkbox take lists, from No transformation or Format list items (array). |
 | list_items (custom List Items field) | Stores an ordered array of strings through ACF. Each item is sanitized as plain text; empty items are removed, while order, duplicates, and the string `"0"` are preserved. The custom field type must already be registered on the site. |
 | date_picker / date_time_picker / time_picker | Normalized to ACF storage: `Ymd`, `Y-m-d H:i:s`, `H:i:s`. |
 | color_picker, link | Hex colors (rgba when opacity is enabled); link from a URL or a `{url, title, target}` object. |
@@ -218,7 +248,7 @@ Values are written with `update_field()` **using field keys**, so ACF records th
 
 Sub fields are only mappable inside their group or repeater; they are never flattened into top-level meta. Groups and repeaters can nest up to three levels deep.
 
-**List Items example.** Map source path `dates_text` to your ACF **List Items** field with **No transformation**. A source such as `["Nov 18, 2026 at 6:30 PM Central", "Nov 20, 2026 at 6:30 PM Central", "Dec 2, 2026 at 6:30 PM Central"]` becomes three list items in that order. The dates stay as display text; they are not parsed or converted to another time zone. Use the list itself, without Join or JSON encode. Strings, objects, nested arrays, and non-string items are rejected instead of being coerced. An empty array replaces the stored list with an empty list; missing/null values follow the mapping's existing Preserve, Clear, or Fail behavior. Text constants and text fallbacks cannot supply a list. List Items also works as a sub field inside groups and repeaters, where Clear writes an empty array. This support is specific to the custom `list_items` type; it does not register the field or enable other custom ACF types.
+**List Items example.** Map source path `dates_text` to your ACF **List Items** field with **No transformation** or **Format list items (array)**. With No transformation, a source such as `["Nov 18, 2026 at 6:30 PM Central", "Nov 20, 2026 at 6:30 PM Central", "Dec 2, 2026 at 6:30 PM Central"]` becomes three list items in that order, kept as display text. Non-string items are rejected instead of being coerced. To reformat each item first — for example to store `["November 18", "November 20", "December 2"]` — use Format list items with date/time formatting (see [Dates and time zones](#dates-and-time-zones)). Join and JSON encode produce a single string and cannot fill List Items. A string source, objects, and nested arrays are rejected. An empty array replaces the stored list with an empty list; missing/null values follow the mapping's existing Preserve, Clear, or Fail behavior. Text constants and text fallbacks cannot supply a list. List Items also works as a sub field inside groups and repeaters, where Clear writes an empty array. This support is specific to the custom `list_items` type; it does not register the field or enable other custom ACF types.
 
 If ACF is deactivated, or a field or field type a preset needs disappears (for example the repeater type without ACF PRO), runs of **that preset** fail with an explanation. Other presets keep working, and presets that only map core fields and meta never need ACF.
 
@@ -302,6 +332,7 @@ A working configuration (field names are examples — choose your site's own fie
 | `sessions` | — | ACF repeater, with sub mappings `date` → date sub field and `time` → time sub field (missing/null: *Leave empty in this row*) |
 | `dates_text[*]` | Join list into text, separator `\n` | ACF textarea/text field or a meta key |
 | `dates_text` | No transformation | Custom ACF List Items (`list_items`), stored as an array |
+| `dates_text` | Format list items (array), date/time formatting with input format `M j, Y \a\t g:i A \C\e\n\t\r\a\l`, input/output time zone `America/Chicago`, output `F j` | Custom ACF List Items, stored as `["November 18", "November 20", "December 2"]` |
 | `location.city` | — | ACF text field (null today → existing value kept) |
 
 Notes for this payload:
@@ -518,6 +549,8 @@ It uses in-memory WordPress, ACF, and `$wpdb` stubs that reproduce the behaviors
 
 List Items coverage includes discovery, array validation and sanitization, previews and imports, repeated and reordered lists, missing/null/empty values, nested fields, failed writes, and preset transfer. Run it separately with `php tests/run.php ListItems`.
 
+Format list items coverage (`FormatList`) includes the `dates_text` example above, time zone conversion, date-only values and default formats, empty lists, null items, duplicates and order, invalid sources and items, direct and wildcard paths, previews and ACF List Items storage, group and repeater sub fields, checkbox and multiple-select choices, incompatible destinations at save and run time, conditions and missing/null handling, saving through the editor form, duplication, change detection, unchanged fingerprints for existing transformations, preset export/import, and unchanged Join output. Run it separately with `php tests/run.php FormatList`.
+
 Conditional mapping coverage includes count comparisons, literal and Unicode text matching, preserving/clearing values, invalid types and settings, nested fields, suppressed image downloads, preview explanations, unchanged legacy fingerprints, and preset transfer. Run it separately with `php tests/run.php Condition`. The DOM tests also exercise condition controls, action restrictions, reordering, and reloads.
 
 The mapping editor also has DOM integration tests that load the actual PHP-rendered editor and admin script with jsdom. Install the test dependency outside the plugin:
@@ -527,7 +560,7 @@ npm install --prefix /tmp/ppapi-mapping-ui --no-audit --no-fund jsdom@26.1.0
 NODE_PATH=/tmp/ppapi-mapping-ui/node_modules node --test tests/admin-mappings.test.cjs
 ```
 
-These cover date option controls, moving across a 30-row list, nested mappings, keyboard use, invalid positions, and serialized settings after reload. They use the same WordPress stubs and do not access a live site.
+These cover date option controls (for Join and Format list items, including the list destination warning), moving across a 30-row list, nested mappings, keyboard use, invalid positions, and serialized settings after reload. They use the same WordPress stubs and do not access a live site.
 
 Preset import coverage (`Transfer`) includes removing unavailable, automatically matched, and nested mappings, groups and repeaters left empty, choices kept through refreshes, post type changes, and validation errors (by re-posting the rendered review form), choices that stay with their mapping when earlier rows are removed, disabling ACF post matching, manipulated removal requests, and unchanged imports when nothing is removed. Run it separately with `php tests/run.php Transfer`.
 
@@ -559,6 +592,12 @@ This writes `build/post-press-api-<version>.zip` with a single top-level `post-p
 - On multisite, schedules are per site; activate the plugin per site rather than network-wide.
 
 ## Changelog
+
+### 1.0.8
+
+- **Format list items (array).** A new transformation converts each item of a source list to text and keeps a native array for ACF List Items (including group and repeater sub fields), checkbox, and multiple-select fields. An optional *Format each item as a date/time* uses the existing input/output formats and time zones, so `["Nov 18, 2026 at 6:30 PM Central", …]` can be stored as `["November 18", "November 20", "December 2"]`. Order and duplicates are kept, null items are skipped as in Join, and an invalid item fails the mapping with its position. The source must be a list.
+- **List destinations are checked.** Text fields, custom meta, post fields, and single-value ACF fields are rejected for this transformation when a preset is saved or imported, and at run time if a field's type has changed. Checkbox and select fields keep their choice validation.
+- **Existing behavior is unchanged.** Join, Date/time, JSON encode, and No transformation work as before, and existing presets keep their change-detection fingerprints. The new transformation and its date settings survive saving, reordering, nesting, duplication, and preset export/import, and older exports still import.
 
 ### 1.0.7
 

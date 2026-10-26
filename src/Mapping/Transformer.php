@@ -23,6 +23,7 @@ final class Transformer
     public const URL      = 'url';
     public const EMAIL    = 'email';
     public const JOIN     = 'join';
+    public const FORMAT_LIST = 'format_list';
     public const JSON     = 'json';
     public const DATETIME = 'datetime';
     public const MAP      = 'map';
@@ -30,7 +31,7 @@ final class Transformer
     /** @var list<string> Every supported transformation. */
     public const TYPES = [
         self::NONE, self::TEXT, self::INTEGER, self::DECIMAL, self::BOOLEAN, self::URL,
-        self::EMAIL, self::JOIN, self::JSON, self::DATETIME, self::MAP,
+        self::EMAIL, self::JOIN, self::FORMAT_LIST, self::JSON, self::DATETIME, self::MAP,
     ];
 
     /** @var array<string, bool> Accepted boolean spellings (lower-case). */
@@ -55,6 +56,7 @@ final class Transformer
             self::URL      => __('Validate URL', 'post-press-api'),
             self::EMAIL    => __('Validate email', 'post-press-api'),
             self::JOIN     => __('Join list into text', 'post-press-api'),
+            self::FORMAT_LIST => __('Format list items (array)', 'post-press-api'),
             self::JSON     => __('JSON encode', 'post-press-api'),
             self::DATETIME => __('Date/time (parse and convert)', 'post-press-api'),
             self::MAP      => __('Value map (convert listed values)', 'post-press-api'),
@@ -88,6 +90,7 @@ final class Transformer
             self::URL      => self::to_url($value),
             self::EMAIL    => self::to_email($value),
             self::JOIN     => self::join($value, self::decode_separator((string) ($options['separator'] ?? ', ')), $options, $site_tz),
+            self::FORMAT_LIST => self::format_list($value, $options, $site_tz),
             self::JSON     => self::to_json($value),
             self::DATETIME => self::to_datetime($value, $options, $site_tz),
             default        => throw new MappingError(sprintf(
@@ -392,6 +395,86 @@ final class Transformer
         }
 
         return implode($separator, $parts);
+    }
+
+    /**
+     * Converts each list item to text, optionally as a date/time, and keeps the list.
+     *
+     * Items follow Join's rules: null items are skipped, other scalars become
+     * text (booleans as true/false), and arrays or objects are rejected. With
+     * join_datetime, each item is parsed and formatted like the Date/time
+     * transformation. Order and duplicates are kept and an empty list stays
+     * empty. The result is a native array for list destinations; it is never
+     * joined or encoded.
+     *
+     * @param mixed                $value   Source list.
+     * @param array<string, mixed> $options Row options, including join_datetime.
+     * @param \DateTimeZone        $site_tz Site time zone.
+     *
+     * @return list<string>
+     *
+     * @throws MappingError When the source is not a list or an item cannot be converted; identifies its position.
+     */
+    public static function format_list(mixed $value, array $options, \DateTimeZone $site_tz): array
+    {
+        if (!is_array($value) || !array_is_list($value)) {
+            throw new MappingError(sprintf(
+                /* translators: %s: value type. */
+                __('Format list items needs a list (array) as its source, but the source is %s. Select the list itself, for example dates_text or sessions[*].date.', 'post-press-api'),
+                ValueInspector::type_label($value)
+            ));
+        }
+
+        $items        = [];
+        $format_dates = !empty($options['join_datetime']);
+
+        foreach ($value as $index => $item) {
+            if ($item === null) {
+                continue;
+            }
+            if (!is_scalar($item)) {
+                throw new MappingError(sprintf(
+                    /* translators: 1: one-based list item position, 2: value type. */
+                    __('List item %1$d is %2$s; only text, numbers, and booleans can be formatted. Select a field inside each item, for example sessions[*].date.', 'post-press-api'),
+                    $index + 1,
+                    ValueInspector::type_label($item)
+                ));
+            }
+            try {
+                $items[] = $format_dates
+                    ? self::stringify(self::to_datetime($item, $options, $site_tz), $site_tz)
+                    : self::to_display_string($item);
+            } catch (MappingError $error) {
+                throw new MappingError(sprintf(
+                    /* translators: 1: one-based list item position, 2: conversion error. */
+                    __('List item %1$d: %2$s', 'post-press-api'),
+                    $index + 1,
+                    $error->getMessage()
+                ));
+            }
+        }
+
+        return $items;
+    }
+
+    /**
+     * Explains why a destination cannot store the list from Format list items.
+     *
+     * @param Destination $destination Resolved destination.
+     *
+     * @return string|null Null for ACF List Items, checkbox, and multiple-choice select fields.
+     */
+    public static function list_destination_error(Destination $destination): ?string
+    {
+        if ($destination->accepts_list()) {
+            return null;
+        }
+
+        return sprintf(
+            /* translators: %s: destination label. */
+            __('"%s" cannot store a list. Format list items (array) only fills ACF List Items, checkbox, and multiple-choice select fields; use Join list into text for text fields and custom meta.', 'post-press-api'),
+            $destination->label
+        );
     }
 
     /**

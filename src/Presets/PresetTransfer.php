@@ -514,7 +514,7 @@ final class PresetTransfer
 
     /**
      * Rejects any normalization that would silently lose or reinterpret settings.
-     * Older exports may omit the Join date flag or condition object; both default off.
+     * Older exports may omit the item date flag (join_datetime) or condition object; both default off.
      * Exports made before the shortcode/block setting existed omit both
      * destination.markup and destination.shortcodes; they import as Neutralize,
      * the default for new presets ({@see review()} warns). Unlike stored presets,

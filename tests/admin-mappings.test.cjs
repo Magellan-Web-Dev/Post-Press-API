@@ -187,6 +187,97 @@ test('Join checkbox reveals date controls and retains entered options across tog
     assert.equal(reloaded.get('row1-opt-input_format').value, 'Y-m-d');
 });
 
+/** Adds List Items, choice-list, and single-value fields to the rendered catalog. */
+function listFields(data) {
+    data.catalog.acf.groups.push({ key: 'group_lists', title: 'Lists', fields: [
+        { key: 'field_test_list', name: 'dates', label: 'Dates', type: 'list_items', supported: true, container: false, multiple: false, children: [] },
+        { key: 'field_test_days', name: 'days', label: 'Days', type: 'checkbox', supported: true, container: false, multiple: true, children: [] },
+        { key: 'field_test_mode', name: 'mode', label: 'Mode', type: 'select', supported: true, container: false, multiple: false, children: [] },
+    ] });
+}
+
+const exampleDates = { input_format: 'M j, Y \\a\\t g:i A \\C\\e\\n\\t\\r\\a\\l', input_timezone: 'America/Chicago', output_format: 'F j', output_timezone: 'America/Chicago' };
+
+test('Format list items offers date controls without a separator and keeps them across toggles/reload', t => {
+    const ui = editor(t, [{ id: 'list', source: 'dates_text', target_type: 'acf', target: 'field_test_list', transform: 'format_list' }], listFields);
+    assert.equal(ui.dirty(), false);
+    assert.equal(ui.get('list-transform').value, 'format_list');
+    assert.equal(ui.get('list-transform').selectedOptions[0].textContent, 'Format list items (array)');
+    assert.equal(ui.get('list-opt-separator'), null);
+    assert.equal(ui.get('list-list-warning'), null, 'List Items stores lists');
+    assert.equal(ui.get('list-opt-join_datetime').checked, false);
+    assert.equal(ui.get('list-opt-join_datetime').parentElement.textContent.trim(), 'Format each item as a date/time');
+    assert.equal(ui.get('list-opt-input_format'), null);
+    ui.get('list-opt-join_datetime').click();
+    assert.equal(ui.document.activeElement.id, 'ppapi-m-list-opt-join_datetime');
+    for (const [key, value] of Object.entries(exampleDates)) {
+        type(ui, 'list-opt-' + key, value);
+    }
+    const saved = ui.rows()[0].options;
+    assert.equal(saved.join_datetime, true);
+    for (const [key, value] of Object.entries(exampleDates)) {
+        assert.equal(saved[key], value, key);
+    }
+    assert.equal(ui.dirty(), true);
+    ui.get('list-opt-join_datetime').click();
+    assert.equal(ui.get('list-opt-input_format'), null);
+    assert.equal(ui.rows()[0].options.join_datetime, false);
+    assert.equal(ui.rows()[0].options.input_format, exampleDates.input_format);
+    ui.get('list-opt-join_datetime').click();
+    const reloaded = editor(t, ui.rows(), listFields);
+    assert.equal(reloaded.get('list-opt-join_datetime').checked, true);
+    for (const [key, value] of Object.entries(exampleDates)) {
+        assert.equal(reloaded.get('list-opt-' + key).value, value, key);
+    }
+    assert.equal(reloaded.get('list-opt-separator'), null);
+});
+
+test('switching between Join and Format list items keeps settings and flags destinations that cannot store lists', t => {
+    const ui = editor(t, null, listFields);
+    assert.equal(ui.get('row1-list-warning'), null);
+    choose(ui, 'row1-transform', 'format_list');
+    assert.equal(ui.rows()[0].transform, 'format_list');
+    assert.equal(ui.get('row1-opt-separator'), null);
+    assert.ok(ui.get('row1-list-warning'), 'custom meta cannot store a list');
+    assert.match(ui.get('row1-list-warning').textContent, /cannot store a list/);
+    assert.equal(ui.rows()[0].options.separator, ', ');
+    choose(ui, 'row1-transform', 'join');
+    assert.equal(ui.get('row1-list-warning'), null);
+    assert.equal(ui.get('row1-opt-separator').value, ', ');
+
+    choose(ui, 'host-transform', 'format_list');
+    assert.ok(ui.get('host-list-warning'), 'an ACF text sub field cannot store a list');
+    assert.equal(ui.get('host-opt-join_datetime').checked, true, 'the item date option carries over from Join');
+    assert.equal(ui.get('host-opt-output_format').value, 'F j');
+    assert.equal(ui.get('group-transform'), null, 'containers still have no transformation');
+
+    choose(ui, 'row2-target-type', 'acf');
+    for (const [field, warns] of [['field_test_days', false], ['field_test_list', false], ['field_test_mode', true], ['field_city', true]]) {
+        choose(ui, 'row2-target', field);
+        choose(ui, 'row2-transform', 'format_list');
+        assert.equal(!!ui.get('row2-list-warning'), warns, field);
+    }
+});
+
+test('Format list items settings move with nested rows and survive form submission', t => {
+    const ui = editor(t);
+    choose(ui, 'host-transform', 'format_list');
+    move(ui, 'host', 2);
+    move(ui, 'group', 1);
+    const form = ui.document.getElementById('ppapi-preset-form');
+    form.dispatchEvent(new ui.window.Event('submit', { cancelable: true }));
+    const submitted = JSON.parse(new ui.window.FormData(form).get('ppapi_mappings'));
+    const host = submitted[0].children[1];
+    assert.equal(host.id, 'host');
+    assert.equal(host.transform, 'format_list');
+    assert.equal(host.options.join_datetime, true);
+    assert.equal(host.options.output_format, 'F j');
+    const reloaded = editor(t, submitted);
+    assert.equal(reloaded.get('host-transform').value, 'format_list');
+    assert.equal(reloaded.get('host-opt-output_format').value, 'F j');
+    assert.equal(reloaded.get('host-position').value, '2');
+});
+
 test('numeric Move jumps from last to first and first to last without losing settings', t => {
     const ui = editor(t);
     const original = ui.rows();
